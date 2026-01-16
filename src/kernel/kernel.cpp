@@ -194,19 +194,29 @@ ipc::Message Kernel::handle_think(const ipc::Message& msg) {
     // Check if LLM is configured
     if (!llm_client_->is_configured()) {
         json response;
+        response["success"] = false;
         response["error"] = "LLM not configured (set GEMINI_API_KEY)";
         response["content"] = "";
         return ipc::Message(msg.agent_id, ipc::SyscallOp::SYS_THINK, response.dump());
     }
 
-    std::string prompt = msg.payload_str();
+    std::string payload = msg.payload_str();
     spdlog::debug("Agent {} thinking: {}", msg.agent_id,
-        prompt.length() > 50 ? prompt.substr(0, 50) + "..." : prompt);
+        payload.length() > 50 ? payload.substr(0, 50) + "..." : payload);
 
-    // Call Gemini API
-    auto result = llm_client_->complete(prompt);
+    // Call LLM service with extended options (supports JSON payload)
+    auto result = llm_client_->complete_with_options(payload);
+
+    // Track tokens in agent (if successful)
+    if (result.success && result.tokens_used > 0) {
+        auto agent = agent_manager_->get_agent(msg.agent_id);
+        if (agent) {
+            agent->record_llm_call(result.tokens_used);
+        }
+    }
 
     json response;
+    response["success"] = result.success;
     if (result.success) {
         response["content"] = result.content;
         response["tokens"] = result.tokens_used;
@@ -251,6 +261,17 @@ ipc::Message Kernel::handle_spawn(const ipc::Message& msg) {
         if (!agent) {
             return ipc::Message(msg.agent_id, ipc::SyscallOp::SYS_SPAWN,
                 R"({"error": "failed to spawn agent"})");
+        }
+
+        // Track parent-child relationship
+        agent->set_parent_id(msg.agent_id);
+
+        // Update parent's child list (if parent exists)
+        if (msg.agent_id > 0) {
+            auto parent = agent_manager_->get_agent(msg.agent_id);
+            if (parent) {
+                parent->add_child(agent->id());
+            }
         }
 
         json response;

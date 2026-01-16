@@ -4,6 +4,8 @@
 #include <optional>
 #include <functional>
 #include <memory>
+#include <cstdio>
+#include <sys/types.h>
 
 namespace agentos::kernel {
 
@@ -60,17 +62,38 @@ public:
     // Load API key from environment
     static std::string get_api_key_from_env();
 
+    // Load model name from environment
+    static std::string get_model_from_env();
+
+    // Complete with extended options (JSON payload)
+    LLMResponse complete_with_options(const std::string& json_payload);
+
 private:
     LLMConfig config_;
 
-    // Build request JSON for Gemini API
-    std::string build_request_json(const std::vector<ChatMessage>& messages);
+    // Subprocess management
+    FILE* subprocess_stdin_ = nullptr;
+    FILE* subprocess_stdout_ = nullptr;
+    pid_t subprocess_pid_ = -1;
+    bool subprocess_started_ = false;
 
-    // Parse response JSON
-    LLMResponse parse_response(const std::string& response_body);
+    // Start the Python LLM subprocess
+    bool start_subprocess();
 
-    // Make HTTP request
-    LLMResponse make_request(const std::string& request_body);
+    // Stop the Python LLM subprocess
+    void stop_subprocess();
+
+    // Call the subprocess with a JSON request
+    LLMResponse call_subprocess(const std::string& request_json);
+
+    // Build request JSON for simple prompt
+    std::string build_simple_request_json(const std::string& prompt);
+
+    // Build request JSON for chat messages
+    std::string build_chat_request_json(const std::vector<ChatMessage>& messages);
+
+    // Parse JSON response from subprocess
+    LLMResponse parse_subprocess_response(const std::string& response_json);
 };
 
 } // namespace agentos::kernel

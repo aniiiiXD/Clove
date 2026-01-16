@@ -35,6 +35,30 @@ enum class AgentState {
 
 const char* agent_state_to_string(AgentState state);
 
+// Agent metrics snapshot
+struct AgentMetrics {
+    uint32_t id;
+    std::string name;
+    pid_t pid;
+    AgentState state;
+
+    // Resource usage (populated from cgroups)
+    uint64_t memory_bytes;
+    double cpu_percent;
+    uint64_t uptime_seconds;
+
+    // LLM activity
+    uint64_t llm_request_count;
+    uint64_t llm_tokens_used;
+
+    // Hierarchy
+    uint32_t parent_id;  // 0 = kernel-spawned
+    std::vector<uint32_t> child_ids;
+
+    // Timestamps
+    uint64_t created_at_ms;
+};
+
 // Forward declaration
 class AgentProcess;
 
@@ -73,6 +97,16 @@ public:
     // Event callback
     void set_event_callback(AgentEventCallback callback);
 
+    // Metrics
+    AgentMetrics get_metrics() const;
+    void record_llm_call(int tokens);
+
+    // Hierarchy
+    void set_parent_id(uint32_t parent_id) { parent_id_ = parent_id; }
+    uint32_t parent_id() const { return parent_id_; }
+    void add_child(uint32_t child_id);
+    const std::vector<uint32_t>& child_ids() const { return child_ids_; }
+
     // Static: generate unique ID
     static uint32_t generate_id();
 
@@ -84,6 +118,13 @@ private:
 
     std::unique_ptr<Sandbox> sandbox_;
     AgentEventCallback event_callback_;
+
+    // Metrics tracking
+    uint64_t llm_request_count_ = 0;
+    uint64_t llm_tokens_used_ = 0;
+    uint32_t parent_id_ = 0;
+    std::vector<uint32_t> child_ids_;
+    uint64_t created_at_ms_ = 0;
 
     void set_state(AgentState new_state);
     std::vector<std::string> build_args() const;

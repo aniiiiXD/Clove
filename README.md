@@ -26,34 +26,40 @@ A microkernel for AI agents. Run multiple AI agents as isolated processes with s
 | 10 agents need LLM | Race conditions | Fair queuing & scheduling |
 | Agent crashes | May corrupt shared state | Clean isolation |
 
-## What is AgentOS?
+## Architecture
 
-AgentOS treats AI agents like operating system processes. It provides:
-
-- **Process Isolation**: Each agent runs in a sandboxed environment (Linux namespaces + cgroups)
-- **Shared LLM Access**: All agents share a single LLM connection (Gemini API)
-- **IPC Protocol**: Binary protocol over Unix domain sockets for fast communication
-- **Resource Limits**: Control memory, CPU, and process limits per agent
+AgentOS uses a C++ kernel with a Python subprocess for LLM calls:
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    AgentOS Kernel (C++)                     │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
-│  │   Reactor   │  │  LLM Client │  │   Agent Manager     │  │
-│  │   (epoll)   │  │   (Gemini)  │  │   (Sandbox/Fork)    │  │
-│  └──────┬──────┘  └──────┬──────┘  └──────────┬──────────┘  │
-│         │                │                     │             │
-│         └────────────────┼─────────────────────┘             │
-│                          │                                   │
-│              Unix Domain Socket (/tmp/agentos.sock)          │
-└──────────────────────────┼───────────────────────────────────┘
-                           │
-        ┌──────────────────┼──────────────────┐
-        │                  │                  │
-   ┌────┴────┐        ┌────┴────┐        ┌────┴────┐
-   │ Agent 1 │        │ Agent 2 │        │ Agent 3 │
-   │(Python) │        │(Python) │        │(Python) │
-   └─────────┘        └─────────┘        └─────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                    AgentOS Kernel (C++23)                        │
+│  ┌─────────────┐  ┌─────────────────┐  ┌─────────────────────┐  │
+│  │   Reactor   │  │   LLM Client    │  │   Agent Manager     │  │
+│  │   (epoll)   │  │ (subprocess)    │  │   (Sandbox/Fork)    │  │
+│  └──────┬──────┘  └────────┬────────┘  └──────────┬──────────┘  │
+│         │                  │                       │             │
+│         └──────────────────┼───────────────────────┘             │
+│                            │                                     │
+│              Unix Domain Socket (/tmp/agentos.sock)              │
+└────────────────────────────┼─────────────────────────────────────┘
+                             │
+        ┌────────────────────┼────────────────────┐
+        │                    │                    │
+   ┌────┴────┐          ┌────┴────┐          ┌────┴────┐
+   │ Agent 1 │          │ Agent 2 │          │ Agent 3 │
+   │(Python) │          │(Python) │          │(Python) │
+   └─────────┘          └─────────┘          └─────────┘
+
+                             │
+                    ┌────────┴────────┐
+                    │  LLM Service    │
+                    │  (Python)       │
+                    │  google-genai   │
+                    └────────┬────────┘
+                             │
+                    ┌────────┴────────┐
+                    │   Gemini API    │
+                    └─────────────────┘
 ```
 
 ## Features
@@ -62,10 +68,12 @@ AgentOS treats AI agents like operating system processes. It provides:
 |---------|--------|-------------|
 | Unix Socket IPC | Done | Binary protocol with 17-byte header |
 | Event Loop | Done | epoll-based reactor pattern |
-| LLM Integration | Done | Google Gemini API (gemini-2.0-flash) |
+| LLM Integration | Done | Google Gemini via Python subprocess (google-genai SDK) |
+| Multimodal Support | Done | Text + image input to LLM |
 | Process Sandboxing | Done | Linux namespaces (PID, NET, MNT, UTS) |
 | Resource Limits | Done | cgroups v2 (memory, CPU, PIDs) |
-| Python SDK | Done | Full client library |
+| Python SDK | Done | Full client library with extended think() API |
+| Environment Config | Done | Automatic .env file loading |
 
 ## Requirements
 
@@ -92,12 +100,29 @@ export VCPKG_ROOT="$HOME/vcpkg"
 ### 2. Install Dependencies
 
 ```bash
-sudo apt install -y build-essential cmake pkg-config libssl-dev python3
+# System dependencies
+sudo apt install -y build-essential cmake pkg-config libssl-dev python3 python3-pip
 
-# vcpkg will install C++ dependencies automatically during build
+# Python dependencies (for LLM service)
+pip3 install google-genai
 ```
 
-### 3. Build
+### 3. Configure API Key
+
+```bash
+# Copy the example .env file
+cp .env.example .env
+
+# Edit .env and add your Gemini API key
+# Get your key from: https://aistudio.google.com/app/apikey
+```
+
+Or set the environment variable directly:
+```bash
+export GEMINI_API_KEY="your-api-key"
+```
+
+### 4. Build
 
 ```bash
 mkdir -p build && cd build
@@ -105,18 +130,19 @@ cmake ..
 make -j$(nproc)
 ```
 
-### 4. Run the Kernel
+### 5. Run the Kernel
 
 ```bash
-# Without LLM (for testing)
-./agentos_kernel
-
-# With Gemini LLM
-export GEMINI_API_KEY="your-api-key"
 ./agentos_kernel
 ```
 
-### 5. Run an Agent
+You should see:
+```
+[info] LLM client initialized (model=gemini-2.0-flash)
+[info] Kernel listening on /tmp/agentos.sock
+```
+
+### 6. Run an Agent
 
 In another terminal:
 
@@ -124,7 +150,7 @@ In another terminal:
 # Simple echo test
 python3 agents/examples/hello_agent.py
 
-# LLM interaction (requires API key)
+# LLM interaction
 python3 agents/examples/thinking_agent.py
 
 # Spawn/kill agents test
@@ -159,20 +185,9 @@ healthy       RUNNING       Unaffected, still working
 
 **Why this matters:** This is literally why operating systems exist. Python frameworks can't do this.
 
-### Individual Stress Test Agents
-
-```bash
-# CPU stress test (infinite loop - gets throttled)
-python3 agents/examples/cpu_hog_agent.py
-
-# Memory stress test (allocates until killed)
-python3 agents/examples/memory_hog_agent.py
-
-# Well-behaved agent (survives while others fail)
-python3 agents/examples/healthy_agent.py
-```
-
 ## Python SDK Usage
+
+### Basic Usage
 
 ```python
 import sys
@@ -184,10 +199,43 @@ with AgentOSClient() as client:
     response = client.echo("Hello!")
     print(response)  # "Hello!"
 
-    # Ask the LLM
+    # Simple LLM query
     result = client.think("What is 2+2?")
     print(result['content'])  # "4"
+```
 
+### Extended LLM Options
+
+The `think()` method supports multimodal input and advanced configuration:
+
+```python
+with AgentOSClient() as client:
+    # With system instruction
+    result = client.think(
+        "Explain quantum computing",
+        system_instruction="You are a physics professor. Be concise.",
+        temperature=0.5
+    )
+
+    # With image input (multimodal)
+    with open("photo.jpg", "rb") as f:
+        result = client.think(
+            "Describe this image",
+            image=f.read(),
+            image_mime_type="image/jpeg"
+        )
+
+    # With thinking level (for reasoning tasks)
+    result = client.think(
+        "Solve this step by step: What is 15% of 240?",
+        thinking_level="high"
+    )
+```
+
+### Agent Management
+
+```python
+with AgentOSClient() as client:
     # Spawn a new agent
     agent = client.spawn(
         name="worker1",
@@ -210,295 +258,42 @@ with AgentOSClient() as client:
 | Opcode | Name | Description | Payload | Response |
 |--------|------|-------------|---------|----------|
 | 0x00 | SYS_NOOP | Echo test | Any bytes | Same bytes |
-| 0x01 | SYS_THINK | LLM query | Prompt string | JSON: `{content, tokens, error}` |
+| 0x01 | SYS_THINK | LLM query | JSON (see below) | JSON: `{success, content, tokens, error}` |
 | 0x10 | SYS_SPAWN | Spawn agent | JSON config | JSON: `{id, name, pid, status}` |
 | 0x11 | SYS_KILL | Kill agent | JSON: `{name}` or `{id}` | JSON: `{killed: bool}` |
 | 0x12 | SYS_LIST | List agents | Empty | JSON array of agents |
 | 0xFF | SYS_EXIT | Disconnect | Empty | "goodbye" |
 
-## Example Workflows
+### SYS_THINK Request Format
 
-### 1. Research Assistant
-
-An agent that searches the web and summarizes findings:
-
-```python
-# agents/examples/research_agent.py
-import sys
-sys.path.insert(0, '../python_sdk')
-from agentos import AgentOSClient
-
-def research(topic):
-    with AgentOSClient() as client:
-        # Ask LLM to generate search queries
-        result = client.think(f"""
-        I need to research: {topic}
-        Generate 3 specific search queries to find information about this.
-        Format: one query per line.
-        """)
-
-        queries = result['content'].strip().split('\n')
-
-        # For each query, ask LLM to analyze (in real app, you'd fetch URLs)
-        findings = []
-        for query in queries[:3]:
-            analysis = client.think(f"""
-            Search query: {query}
-            Based on your knowledge, provide key facts about this topic.
-            Be concise (2-3 sentences).
-            """)
-            findings.append(analysis['content'])
-
-        # Synthesize findings
-        summary = client.think(f"""
-        Topic: {topic}
-
-        Findings:
-        {chr(10).join(f'- {f}' for f in findings)}
-
-        Write a brief summary paragraph combining these findings.
-        """)
-
-        return summary['content']
-
-if __name__ == '__main__':
-    topic = input("Research topic: ")
-    result = research(topic)
-    print(f"\n=== Summary ===\n{result}")
+```json
+{
+  "prompt": "Your question here",
+  "image": {
+    "data": "<base64-encoded-image>",
+    "mime_type": "image/jpeg"
+  },
+  "system_instruction": "You are a helpful assistant",
+  "thinking_level": "low|medium|high",
+  "temperature": 0.7,
+  "model": "gemini-2.0-flash"
+}
 ```
 
-### 2. Code Review Agent
+All fields except `prompt` are optional.
 
-An agent that reviews code and suggests improvements:
+### SYS_THINK Response Format
 
-```python
-# agents/examples/code_review_agent.py
-import sys
-sys.path.insert(0, '../python_sdk')
-from agentos import AgentOSClient
-
-def review_code(code: str, language: str = "python"):
-    with AgentOSClient() as client:
-        result = client.think(f"""
-        Review this {language} code for:
-        1. Bugs or errors
-        2. Security issues
-        3. Performance problems
-        4. Style improvements
-
-        Code:
-        ```{language}
-        {code}
-        ```
-
-        Provide specific, actionable feedback.
-        """)
-        return result['content']
-
-if __name__ == '__main__':
-    code = '''
-def get_user(id):
-    query = "SELECT * FROM users WHERE id = " + id
-    return db.execute(query)
-    '''
-
-    print(review_code(code))
-```
-
-### 3. Multi-Agent Chat System
-
-Spawn multiple specialized agents that collaborate:
-
-```python
-# agents/examples/multi_agent_chat.py
-import sys
-import time
-sys.path.insert(0, '../python_sdk')
-from agentos import AgentOSClient
-
-def create_specialist_agent(client, name, role):
-    """Create a worker agent with a specific role."""
-    # In a full implementation, each worker would have its own context
-    return client.spawn(
-        name=name,
-        script="worker_agent.py",
-        sandboxed=True,
-        limits={"memory": 128*1024*1024, "max_pids": 16}
-    )
-
-def multi_agent_discussion(topic):
-    with AgentOSClient() as client:
-        # Different perspectives
-        perspectives = [
-            ("analyst", "analytical and data-driven"),
-            ("creative", "creative and unconventional"),
-            ("critic", "critical and skeptical"),
-        ]
-
-        responses = []
-        for name, style in perspectives:
-            result = client.think(f"""
-            You are a {style} thinker.
-            Topic: {topic}
-
-            Share your perspective in 2-3 sentences.
-            Be {style} in your approach.
-            """)
-            responses.append((name, result['content']))
-            print(f"\n[{name.upper()}]: {result['content']}")
-
-        # Synthesize
-        all_perspectives = "\n".join(f"- {name}: {resp}" for name, resp in responses)
-        synthesis = client.think(f"""
-        Topic: {topic}
-
-        Different perspectives:
-        {all_perspectives}
-
-        Synthesize these viewpoints into a balanced conclusion (2-3 sentences).
-        """)
-
-        print(f"\n[SYNTHESIS]: {synthesis['content']}")
-        return synthesis['content']
-
-if __name__ == '__main__':
-    topic = input("Discussion topic: ")
-    multi_agent_discussion(topic)
-```
-
-### 4. Autonomous Task Agent
-
-An agent that breaks down and executes complex tasks:
-
-```python
-# agents/examples/task_agent.py
-import sys
-sys.path.insert(0, '../python_sdk')
-from agentos import AgentOSClient
-
-def execute_task(task_description):
-    with AgentOSClient() as client:
-        # Plan
-        plan = client.think(f"""
-        Task: {task_description}
-
-        Break this into 3-5 concrete steps.
-        Format each step as: "STEP N: description"
-        """)
-        print(f"=== Plan ===\n{plan['content']}\n")
-
-        # Extract steps
-        steps = [line.strip() for line in plan['content'].split('\n')
-                 if line.strip().startswith('STEP')]
-
-        # Execute each step
-        results = []
-        for i, step in enumerate(steps, 1):
-            print(f"\n--- Executing {step} ---")
-
-            result = client.think(f"""
-            You are executing step {i} of a task.
-
-            Overall task: {task_description}
-            Current step: {step}
-            Previous results: {results[-1] if results else 'None'}
-
-            Provide the output for this step.
-            """)
-
-            results.append(result['content'])
-            print(f"Result: {result['content'][:200]}...")
-
-        # Final summary
-        summary = client.think(f"""
-        Task completed: {task_description}
-
-        Step results:
-        {chr(10).join(f'{i+1}. {r[:100]}...' for i, r in enumerate(results))}
-
-        Provide a brief final summary of what was accomplished.
-        """)
-
-        print(f"\n=== Final Summary ===\n{summary['content']}")
-        return summary['content']
-
-if __name__ == '__main__':
-    task = input("Task: ")
-    execute_task(task)
-```
-
-### 5. Conversation Memory Agent
-
-An agent that maintains conversation context:
-
-```python
-# agents/examples/memory_agent.py
-import sys
-sys.path.insert(0, '../python_sdk')
-from agentos import AgentOSClient
-
-class ConversationAgent:
-    def __init__(self):
-        self.history = []
-        self.client = AgentOSClient()
-        self.client.connect()
-
-    def chat(self, user_message):
-        self.history.append(f"User: {user_message}")
-
-        # Build context from history
-        context = "\n".join(self.history[-10:])  # Last 10 messages
-
-        result = self.client.think(f"""
-        Conversation history:
-        {context}
-
-        Respond naturally to the user's latest message.
-        Keep your response concise (1-3 sentences).
-        """)
-
-        assistant_response = result['content']
-        self.history.append(f"Assistant: {assistant_response}")
-
-        return assistant_response
-
-    def close(self):
-        self.client.disconnect()
-
-if __name__ == '__main__':
-    agent = ConversationAgent()
-    print("Chat with the agent (type 'quit' to exit)\n")
-
-    try:
-        while True:
-            user_input = input("You: ").strip()
-            if user_input.lower() == 'quit':
-                break
-            if not user_input:
-                continue
-
-            response = agent.chat(user_input)
-            print(f"Agent: {response}\n")
-    finally:
-        agent.close()
+```json
+{
+  "success": true,
+  "content": "LLM response text",
+  "tokens": 123,
+  "error": null
+}
 ```
 
 ## Configuration
-
-### Kernel Configuration
-
-The kernel can be configured programmatically:
-
-```cpp
-// In your code
-agentos::kernel::KernelConfig config;
-config.socket_path = "/tmp/agentos.sock";
-config.enable_sandboxing = true;
-config.gemini_api_key = "your-key";  // Or set GEMINI_API_KEY env var
-config.llm_model = "gemini-2.0-flash";
-
-agentos::kernel::Kernel kernel(config);
-```
 
 ### Environment Variables
 
@@ -506,6 +301,26 @@ agentos::kernel::Kernel kernel(config);
 |----------|-------------|---------|
 | `GEMINI_API_KEY` | Google Gemini API key | (none) |
 | `GOOGLE_API_KEY` | Fallback API key | (none) |
+| `GEMINI_MODEL` | Model to use | gemini-2.0-flash |
+
+### .env File
+
+AgentOS automatically loads configuration from a `.env` file. Copy `.env.example` to `.env`:
+
+```bash
+cp .env.example .env
+```
+
+Example `.env`:
+```
+GEMINI_API_KEY=your_api_key_here
+GEMINI_MODEL=gemini-2.0-flash
+```
+
+The `.env` file is searched in these locations:
+1. Current working directory
+2. Project root directory
+3. Home directory
 
 ### Agent Resource Limits
 
@@ -519,7 +334,7 @@ client.spawn(
     limits={
         "memory": 256 * 1024 * 1024,  # 256MB
         "max_pids": 64,                # Max processes
-        "cpu_quota": 100000            # CPU microseconds per period
+        "cpu_quota": 100000            # CPU microseconds per period (100% = 100000)
     }
 )
 ```
@@ -533,7 +348,7 @@ AgentOS/
 │   ├── kernel/
 │   │   ├── kernel.hpp/cpp       # Main kernel class
 │   │   ├── reactor.hpp/cpp      # epoll event loop
-│   │   └── llm_client.hpp/cpp   # Gemini API client
+│   │   └── llm_client.hpp/cpp   # LLM subprocess manager
 │   ├── ipc/
 │   │   ├── protocol.hpp         # Binary protocol definition
 │   │   └── socket_server.hpp/cpp # Unix socket server
@@ -545,18 +360,22 @@ AgentOS/
 ├── agents/
 │   ├── python_sdk/
 │   │   └── agentos.py           # Python client library
+│   ├── llm_service/
+│   │   ├── llm_service.py       # Python LLM subprocess (google-genai)
+│   │   └── requirements.txt     # Python dependencies
 │   └── examples/
 │       ├── hello_agent.py       # Echo test
 │       ├── thinking_agent.py    # LLM interaction
 │       ├── worker_agent.py      # Spawnable worker
 │       ├── spawn_test.py        # Agent management test
-│       ├── fault_isolation_demo.py  # OS-level fault isolation demo
-│       ├── cpu_hog_agent.py     # CPU stress test agent
-│       ├── memory_hog_agent.py  # Memory stress test agent
+│       ├── fault_isolation_demo.py  # OS-level fault isolation
+│       ├── cpu_hog_agent.py     # CPU stress test
+│       ├── memory_hog_agent.py  # Memory stress test
 │       └── healthy_agent.py     # Well-behaved agent
 ├── build/                       # Build output
 ├── CMakeLists.txt              # Build configuration
 ├── vcpkg.json                  # C++ dependencies
+├── .env.example                # Environment template
 ├── STATUS.md                   # Development status
 └── README.md                   # This file
 ```
@@ -572,8 +391,20 @@ rm -f /tmp/agentos.sock
 
 ### "LLM not configured" error
 
+Make sure your API key is set:
 ```bash
+# Option 1: Environment variable
 export GEMINI_API_KEY="your-api-key"
+
+# Option 2: .env file
+echo "GEMINI_API_KEY=your-api-key" > .env
+```
+
+### "Could not find llm_service.py"
+
+Make sure you're running from the project directory or build directory:
+```bash
+cd /path/to/AgentOS/build
 ./agentos_kernel
 ```
 
@@ -595,6 +426,13 @@ rm -rf build
 mkdir build && cd build
 cmake ..
 make -j$(nproc)
+```
+
+### Python import errors
+
+Install the LLM service dependencies:
+```bash
+pip3 install google-genai
 ```
 
 ## Development

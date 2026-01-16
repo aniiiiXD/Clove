@@ -170,19 +170,59 @@ class AgentOSClient:
         response = self.call(SyscallOp.SYS_NOOP, message)
         return response.payload_str if response else None
 
-    def think(self, prompt: str) -> dict:
+    def think(self, prompt: str,
+              image: bytes = None,
+              image_mime_type: str = "image/jpeg",
+              system_instruction: str = None,
+              thinking_level: str = None,
+              temperature: float = None,
+              model: str = None) -> dict:
         """Send a prompt to the LLM via Gemini API.
 
-        Returns dict with 'content', 'tokens', and optionally 'error'.
+        Args:
+            prompt: The text prompt to send
+            image: Optional image bytes for multimodal input
+            image_mime_type: MIME type of image (default: "image/jpeg")
+            system_instruction: Optional system instruction for the model
+            thinking_level: Optional thinking level ("low", "medium", "high")
+            temperature: Optional temperature for generation (0.0-1.0)
+            model: Optional model name (default: gemini-2.0-flash)
+
+        Returns:
+            dict with 'success', 'content', 'tokens', and optionally 'error'
         """
         import json
-        response = self.call(SyscallOp.SYS_THINK, prompt)
+        import base64
+
+        # Build request payload
+        payload = {"prompt": prompt}
+
+        if image:
+            payload["image"] = {
+                "data": base64.b64encode(image).decode(),
+                "mime_type": image_mime_type
+            }
+
+        if system_instruction:
+            payload["system_instruction"] = system_instruction
+
+        if thinking_level:
+            payload["thinking_level"] = thinking_level
+
+        if temperature is not None:
+            payload["temperature"] = temperature
+
+        if model:
+            payload["model"] = model
+
+        # Send JSON payload
+        response = self.call(SyscallOp.SYS_THINK, json.dumps(payload))
         if response:
             try:
                 return json.loads(response.payload_str)
             except json.JSONDecodeError:
-                return {"content": response.payload_str, "error": None}
-        return {"content": "", "error": "No response from kernel"}
+                return {"success": True, "content": response.payload_str, "error": None}
+        return {"success": False, "content": "", "error": "No response from kernel"}
 
     def exit(self) -> bool:
         """Request graceful exit"""

@@ -1,6 +1,8 @@
 #include "runtime/agent_process.hpp"
 #include <spdlog/spdlog.h>
 #include <atomic>
+#include <chrono>
+#include <fstream>
 
 namespace agentos::runtime {
 
@@ -33,6 +35,11 @@ uint32_t AgentProcess::generate_id() {
 AgentProcess::AgentProcess(const AgentConfig& config)
     : config_(config)
     , id_(generate_id()) {
+    // Record creation timestamp
+    auto now = std::chrono::system_clock::now();
+    created_at_ms_ = std::chrono::duration_cast<std::chrono::milliseconds>(
+        now.time_since_epoch()).count();
+
     spdlog::debug("AgentProcess created: {} (id={})", config_.name, id_);
 }
 
@@ -135,6 +142,62 @@ bool AgentProcess::is_running() const {
 
 void AgentProcess::set_event_callback(AgentEventCallback callback) {
     event_callback_ = std::move(callback);
+}
+
+AgentMetrics AgentProcess::get_metrics() const {
+    AgentMetrics metrics;
+    metrics.id = id_;
+    metrics.name = config_.name;
+    metrics.pid = pid();
+    metrics.state = state_;
+
+    // Calculate uptime
+    auto now = std::chrono::system_clock::now();
+    auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        now.time_since_epoch()).count();
+    metrics.uptime_seconds = (now_ms - created_at_ms_) / 1000;
+
+    // Read memory usage from cgroups
+    metrics.memory_bytes = 0;
+    metrics.cpu_percent = 0.0;
+
+    if (config_.sandboxed && sandbox_ && state_ == AgentState::RUNNING) {
+        std::string cgroup_path = "/sys/fs/cgroup/agentos/" + config_.name + "_" + std::to_string(id_);
+
+        // Read memory.current
+        std::ifstream mem_file(cgroup_path + "/memory.current");
+        if (mem_file) {
+            mem_file >> metrics.memory_bytes;
+        }
+
+        // CPU percentage calculation requires tracking over time
+        // For now, we'll leave it at 0 (can be enhanced later)
+    }
+
+    // LLM metrics
+    metrics.llm_request_count = llm_request_count_;
+    metrics.llm_tokens_used = llm_tokens_used_;
+
+    // Hierarchy
+    metrics.parent_id = parent_id_;
+    metrics.child_ids = child_ids_;
+
+    // Timestamps
+    metrics.created_at_ms = created_at_ms_;
+
+    return metrics;
+}
+
+void AgentProcess::record_llm_call(int tokens) {
+    llm_request_count_++;
+    llm_tokens_used_ += tokens;
+    spdlog::debug("Agent {} LLM call: {} tokens (total: {})",
+        config_.name, tokens, llm_tokens_used_);
+}
+
+void AgentProcess::add_child(uint32_t child_id) {
+    child_ids_.push_back(child_id);
+    spdlog::debug("Agent {} added child: {}", config_.name, child_id);
 }
 
 void AgentProcess::set_state(AgentState new_state) {

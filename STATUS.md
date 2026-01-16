@@ -1,6 +1,6 @@
 # AgentOS Development Status
 
-**Last Updated:** 2026-01-16
+**Last Updated:** 2026-01-17
 
 ---
 
@@ -213,9 +213,15 @@ KILLED: PID limit exceeded
 
 ---
 
-## Phase 3: LLM Integration (Gemini) **COMPLETE**
+## Phase 3: LLM Integration (Gemini) **COMPLETE** (Updated 2026-01-17)
 
 **Goal:** Connect to Google Gemini API and enable agents to think via SYS_THINK.
+
+**Architecture Update (2026-01-17):** Replaced C++ HTTP client with Python subprocess using google-genai SDK. This enables:
+- Multimodal support (text + images)
+- System instructions
+- Thinking configurations (thinking_level)
+- Cleaner separation of LLM logic
 
 ---
 
@@ -223,14 +229,48 @@ KILLED: PID limit exceeded
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 3.1 | Add cpp-httplib + OpenSSL | [x] Done | HTTPS support |
-| 3.2 | Create llm_client.hpp/cpp | [x] Done | Gemini API client |
-| 3.3 | Implement Gemini request format | [x] Done | Contents/parts JSON |
-| 3.4 | Integrate into kernel | [x] Done | LLMClient member |
-| 3.5 | Update SYS_THINK handler | [x] Done | Returns JSON response |
-| 3.6 | Update Python SDK think() | [x] Done | Returns dict with content/error |
+| 3.1 | Add cpp-httplib + OpenSSL | [x] Done | Still used for other HTTP needs |
+| 3.2 | Create llm_client.hpp/cpp | [x] Done | Subprocess manager (not HTTP) |
+| 3.3 | Create llm_service.py | [x] Done | Python subprocess using google-genai |
+| 3.4 | Integrate into kernel | [x] Done | LLMClient spawns Python subprocess |
+| 3.5 | Update SYS_THINK handler | [x] Done | JSON payload with extended options |
+| 3.6 | Update Python SDK think() | [x] Done | Multimodal, system_instruction, thinking_level |
 | 3.7 | Create thinking_agent.py | [x] Done | Interactive example |
-| 3.8 | Test LLM integration | [x] Done | Error handling verified |
+| 3.8 | Add .env file loading | [x] Done | Auto-loads from project root |
+| 3.9 | Test multimodal support | [x] Done | Image input working |
+
+---
+
+## LLM Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    AgentOS Kernel (C++)                      │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │  LLMClient                                             │  │
+│  │  - Spawns Python subprocess                           │  │
+│  │  - Communicates via stdin/stdout (JSON)               │  │
+│  │  - Loads .env file for API keys                       │  │
+│  └────────────────────────┬──────────────────────────────┘  │
+└───────────────────────────┼─────────────────────────────────┘
+                            │ JSON over pipes
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│                 LLM Service (Python subprocess)              │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │  llm_service.py                                        │  │
+│  │  - Uses google-genai SDK                              │  │
+│  │  - Supports multimodal (text + images)                │  │
+│  │  - Supports system_instruction, thinking_level        │  │
+│  │  - Loads .env file for API keys                       │  │
+│  └────────────────────────┬──────────────────────────────┘  │
+└───────────────────────────┼─────────────────────────────────┘
+                            │ HTTPS
+                            ▼
+                    ┌───────────────┐
+                    │  Gemini API   │
+                    └───────────────┘
+```
 
 ---
 
@@ -240,9 +280,11 @@ KILLED: PID limit exceeded
 [Test 1] SYS_THINK without API key - PASS (returns error JSON)
 [Test 2] SYS_NOOP echo            - PASS (still works)
 [Test 3] Kernel starts with LLM   - PASS (logs LLM status)
+[Test 4] .env file loading        - PASS (auto-loads API key)
+[Test 5] Multimodal (image+text)  - PASS (image input works)
 ```
 
-Note: Set GEMINI_API_KEY or GOOGLE_API_KEY environment variable for live LLM calls.
+Note: Set GEMINI_API_KEY in .env file or environment variable for live LLM calls.
 
 ---
 
@@ -314,10 +356,10 @@ AGENTOS/
 │   │   ├── kernel.cpp            # + spawn/kill/list/think handlers
 │   │   ├── reactor.hpp           # Event loop
 │   │   ├── reactor.cpp           # epoll implementation
-│   │   ├── llm_client.hpp        # NEW - Gemini API client
-│   │   └── llm_client.cpp        # NEW - HTTP/JSON handling
+│   │   ├── llm_client.hpp        # LLM subprocess manager
+│   │   └── llm_client.cpp        # Subprocess IPC, .env loading
 │   ├── ipc/
-│   │   ├── protocol.hpp          # Binary protocol + new opcodes
+│   │   ├── protocol.hpp          # Binary protocol + opcodes
 │   │   ├── socket_server.hpp     # Server class
 │   │   └── socket_server.cpp     # Unix socket impl
 │   ├── runtime/
@@ -330,16 +372,25 @@ AGENTOS/
 │       └── logger.cpp
 ├── agents/
 │   ├── python_sdk/
-│   │   └── agentos.py            # + think() returns JSON
+│   │   └── agentos.py            # Client SDK (multimodal think())
+│   ├── llm_service/
+│   │   ├── llm_service.py        # LLM subprocess (google-genai)
+│   │   └── requirements.txt      # Python dependencies
 │   └── examples/
 │       ├── hello_agent.py        # Echo test
+│       ├── thinking_agent.py     # LLM interaction
 │       ├── worker_agent.py       # Spawnable worker
 │       ├── spawn_test.py         # Spawn test script
-│       └── thinking_agent.py     # NEW - LLM interaction
+│       ├── fault_isolation_demo.py  # OS-level fault isolation
+│       ├── cpu_hog_agent.py      # CPU stress test
+│       ├── memory_hog_agent.py   # Memory stress test
+│       └── healthy_agent.py      # Well-behaved agent
 ├── build/
 │   └── agentos_kernel
 ├── CMakeLists.txt
 ├── vcpkg.json
+├── .env.example                  # Environment template
+├── .env                          # Local config (not in git)
 ├── STATUS.md
 └── README.md
 ```
@@ -355,6 +406,7 @@ AGENTOS/
 | Phase 2 | Sandboxing | **COMPLETE** |
 | Phase 3 | LLM Integration (Gemini) | **COMPLETE** |
 | Phase 4 | OS-Level Demonstrations | **IN PROGRESS** |
+| Phase 5 | Universal Agent Runtime | **PLANNED** |
 
 ---
 
@@ -470,18 +522,35 @@ python3 /home/anixd/Documents/AGENTOS/agents/examples/spawn_test.py
 
 ---
 
-## SYS_THINK Syscall (Phase 3)
+## SYS_THINK Syscall (Phase 3 - Updated)
 
 | Opcode | Name | Description |
 |--------|------|-------------|
-| 0x01 | SYS_THINK | Send prompt to Gemini LLM |
+| 0x01 | SYS_THINK | Send prompt to Gemini LLM (multimodal) |
 
-### SYS_THINK Request
-Plain text prompt string.
+### SYS_THINK Request (JSON)
 
-### SYS_THINK Response (JSON)
 ```json
 {
+  "prompt": "Your question here",
+  "image": {
+    "data": "<base64-encoded-image>",
+    "mime_type": "image/jpeg"
+  },
+  "system_instruction": "You are a helpful assistant",
+  "thinking_level": "low|medium|high",
+  "temperature": 0.7,
+  "model": "gemini-2.0-flash"
+}
+```
+
+All fields except `prompt` are optional. For backward compatibility, plain text strings are also accepted.
+
+### SYS_THINK Response (JSON)
+
+```json
+{
+  "success": true,
   "content": "LLM response text",
   "tokens": 123,
   "error": null
@@ -491,6 +560,7 @@ Plain text prompt string.
 If error:
 ```json
 {
+  "success": false,
   "content": "",
   "error": "Error message"
 }
@@ -500,16 +570,43 @@ If error:
 
 ## LLM Configuration
 
-Set environment variable before starting kernel:
+### Option 1: .env File (Recommended)
+
+```bash
+# Copy template and edit
+cp .env.example .env
+
+# Add your API key
+echo "GEMINI_API_KEY=your-api-key" >> .env
+```
+
+The .env file is automatically loaded from:
+1. Current working directory
+2. Project root (relative to executable)
+3. Parent directories
+
+### Option 2: Environment Variable
+
 ```bash
 export GEMINI_API_KEY="your-api-key"
 # Or
 export GOOGLE_API_KEY="your-api-key"
 ```
 
-Configurable in `KernelConfig`:
-- `gemini_api_key`: API key (or from env)
-- `llm_model`: Model name (default: "gemini-2.0-flash")
+### Python Dependency
+
+The LLM service requires the google-genai package:
+```bash
+pip3 install google-genai
+```
+
+### Configurable Options
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| GEMINI_API_KEY | Google Gemini API key | (none) |
+| GOOGLE_API_KEY | Fallback API key | (none) |
+| GEMINI_MODEL | Model name | gemini-2.0-flash |
 
 ---
 
@@ -531,17 +628,125 @@ python3 /home/anixd/Documents/AGENTOS/agents/examples/thinking_agent.py
 
 **Primary Focus:** OS-Level Demonstrations (prove why AgentOS must exist)
 
-1. **4.1 Crash-Resistant Agents** - Fault isolation demo (highest impact)
+1. **4.1 Crash-Resistant Agents** - Fault isolation demo (highest impact) **DONE**
 2. **4.3 Untrusted Execution** - Security story ("Docker-lite for AI")
 3. **4.2 LLM Contention** - Fair scheduling ("kernel scheduler for LLM access")
 4. **4.4 Supervisor Agent** - PID 1 semantics ("systemd for AI agents")
 5. **4.5 Agent Pipelines** - Real IPC benchmarks ("processes, not coroutines")
 
-**Secondary (After Phase 4):**
+---
+
+## Phase 5: Universal Agent Runtime (Host Access)
+
+**Vision:** AgentOS becomes the universal runtime layer that ANY agent/workflow can plug into - with controlled access to your PC.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              AGENT FRAMEWORKS (plug into AgentOS)           │
+│  LangChain │ CrewAI │ AutoGen │ n8n │ Custom │ MCP Clients  │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+              ┌────────────┴────────────┐
+              │     AgentOS Kernel      │
+              │   (Permissions + Audit) │
+              └────────────┬────────────┘
+                           │
+        ┌──────────────────┼──────────────────┐
+        │                  │                  │
+   Your Files         Your Apps          Your APIs
+```
+
+### 5.1 Host Access Syscalls
+
+| Syscall | Description | Permission Model |
+|---------|-------------|------------------|
+| SYS_READ | Read file from host | Path whitelist |
+| SYS_WRITE | Write file to host | Path whitelist |
+| SYS_EXEC | Run shell command | Command approval |
+| SYS_HTTP | Make HTTP request | Domain whitelist |
+| SYS_NOTIFY | Desktop notification | Always allowed |
+| SYS_CLIPBOARD | Read/write clipboard | User approval |
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Implement SYS_READ with path validation | [ ] Pending | Whitelist paths |
+| Implement SYS_WRITE with path validation | [ ] Pending | Whitelist paths |
+| Implement SYS_EXEC with approval | [ ] Pending | Command filtering |
+| Implement SYS_HTTP with domain whitelist | [ ] Pending | Network control |
+| Add permission model to spawn config | [ ] Pending | Capability system |
+| Add audit logging for all host access | [ ] Pending | Security trail |
+
+### 5.2 Permission Model
+
+```python
+# Agents declare what they need access to
+client.spawn(
+    name="file-organizer",
+    script="organizer.py",
+    permissions={
+        "filesystem": {
+            "read": ["/home/user/Documents/*"],
+            "write": ["/home/user/Documents/organized/*"]
+        },
+        "exec": ["git", "python"],
+        "network": ["api.github.com"],
+        "llm": {"budget": 10000}  # max tokens
+    }
+)
+```
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Design permission schema | [ ] Pending | JSON format |
+| Implement permission validation in kernel | [ ] Pending | Check on each syscall |
+| Add permission inheritance for child agents | [ ] Pending | Can't exceed parent |
+| User approval flow for sensitive ops | [ ] Pending | Interactive prompts |
+
+### 5.3 Framework Adapters
+
+| Adapter | Status | Notes |
+|---------|--------|-------|
+| langchain_adapter.py | [ ] Pending | LangChain tools → AgentOS syscalls |
+| crewai_adapter.py | [ ] Pending | CrewAI agents → AgentOS processes |
+| autogen_adapter.py | [ ] Pending | AutoGen → AgentOS |
+| mcp_server.py | [ ] Pending | AgentOS as MCP server for Claude Desktop |
+
+### 5.4 MCP Integration (Claude Desktop)
+
+Make AgentOS an MCP server so Claude Desktop can:
+- Spawn agents on your PC
+- Access files (with permission)
+- Run commands (with approval)
+- All through the safe AgentOS layer
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Implement MCP server protocol | [ ] Pending | JSON-RPC over stdio |
+| Expose AgentOS syscalls as MCP tools | [ ] Pending | read, write, exec, think |
+| Add to Claude Desktop config | [ ] Pending | Installation docs |
+
+---
+
+## Phase 5 Summary
+
+**What this enables:**
+- Any agent framework runs ON AgentOS (safely)
+- Claude Desktop gets controlled PC access
+- Workflows from n8n/etc run in isolation
+- Universal "write once, run anywhere" for agents
+
+**Positioning:**
+- Phase 4: "Prove why AgentOS must exist" (demos)
+- Phase 5: "Make AgentOS the universal agent runtime" (integration)
+
+---
+
+**Secondary (After Phase 5):**
 - Streaming responses (SSE)
 - Conversation history/context
 - Tool use / function calling
 - Persistent agent state
+- Multi-LLM support (OpenAI, Claude, local models)
 
 ---
 
@@ -556,10 +761,12 @@ Two compelling narratives for AgentOS:
 
 ## Notes
 
-- All tests passing as of 2026-01-16
+- All tests passing as of 2026-01-17
 - Sandbox fallback works correctly without root
-- Python SDK fully updated with spawn/kill/list/think
-- LLM client uses cpp-httplib with OpenSSL for HTTPS
-- Gemini API v1beta with generateContent endpoint
+- Python SDK fully updated with spawn/kill/list/think (multimodal support)
+- **LLM client uses Python subprocess (google-genai SDK)** instead of C++ HTTP
+- Automatic .env file loading in both C++ and Python
+- Multimodal support: text + images
+- Extended think() options: system_instruction, thinking_level, temperature
 - **Current examples are SDK onboarding / smoke tests** - not the flagship demos
 - **Phase 4 goal: adversarial examples that only AgentOS can handle cleanly**
