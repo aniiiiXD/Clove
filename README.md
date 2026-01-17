@@ -74,6 +74,10 @@ AgentOS uses a C++ kernel with a Python subprocess for LLM calls:
 | Resource Limits | Done | cgroups v2 (memory, CPU, PIDs) |
 | Python SDK | Done | Full client library with extended think() API |
 | Environment Config | Done | Automatic .env file loading |
+| **Permission System** | Done | Path validation, command filtering, domain whitelist |
+| **HTTP Syscall** | Done | Make HTTP requests with domain restrictions |
+| **MCP Server** | Done | Claude Desktop integration via MCP protocol |
+| **Framework Adapters** | Done | LangChain, CrewAI, AutoGen integration |
 
 ## Requirements
 
@@ -253,15 +257,165 @@ with AgentOSClient() as client:
     client.kill(name="worker1")
 ```
 
+## Permission System
+
+AgentOS implements a comprehensive permission system that controls what agents can access:
+
+### Permission Levels
+
+| Level | Description |
+|-------|-------------|
+| `unrestricted` | Full access (dangerous!) |
+| `standard` | Default safe restrictions |
+| `sandboxed` | Strict restrictions, limited paths |
+| `readonly` | Can only read, no writes or execution |
+| `minimal` | Almost no permissions |
+
+### Setting Permissions
+
+```python
+with AgentOSClient() as client:
+    # Set permission level
+    client.set_permissions(level="standard")
+
+    # Get current permissions
+    perms = client.get_permissions()
+    print(perms)
+```
+
+### Permission Features
+
+- **Path validation** - Glob patterns for allowed/blocked paths
+- **Command filtering** - Block dangerous commands (rm -rf, sudo, etc.)
+- **Domain whitelist** - HTTP requests limited to approved domains
+- **LLM quotas** - Token and call limits per agent
+
+## HTTP Requests
+
+Agents can make HTTP requests through AgentOS with domain restrictions:
+
+```python
+with AgentOSClient() as client:
+    # Simple GET request
+    result = client.http("https://api.github.com/users/octocat")
+    print(result['body'])
+
+    # POST with headers and body
+    result = client.http(
+        url="https://api.example.com/data",
+        method="POST",
+        headers={"Content-Type": "application/json"},
+        body='{"key": "value"}'
+    )
+```
+
+## Framework Adapters
+
+AgentOS provides adapters for popular AI agent frameworks. All operations go through AgentOS's permission system.
+
+### LangChain
+
+```python
+from agents.adapters.langchain_adapter import AgentOSToolkit
+
+# Create toolkit connected to AgentOS
+toolkit = AgentOSToolkit(permission_level="standard")
+tools = toolkit.get_tools()
+
+# Use with any LangChain agent
+from langchain.agents import create_react_agent
+agent = create_react_agent(llm, tools, prompt)
+```
+
+### CrewAI
+
+```python
+from agents.adapters.crewai_adapter import AgentOSCrewAgent
+
+# Create agent factory
+factory = AgentOSCrewAgent(permission_level="standard")
+
+# Create pre-configured agents
+researcher = factory.create_researcher()
+developer = factory.create_developer()
+```
+
+### AutoGen
+
+```python
+from agents.adapters.autogen_adapter import AgentOSAssistant, AgentOSUserProxy
+
+# Create assistant with AgentOS tools
+assistant = AgentOSAssistant(
+    name="coder",
+    llm_config={"config_list": [{"model": "gpt-4"}]},
+    permission_level="standard"
+)
+
+# User proxy executes through AgentOS
+user_proxy = AgentOSUserProxy(name="user", human_input_mode="NEVER")
+user_proxy.initiate_chat(assistant, message="Create a Python script")
+```
+
+See `agents/adapters/README.md` for detailed documentation.
+
+## MCP Integration (Claude Desktop)
+
+AgentOS can be used as an MCP server for Claude Desktop, giving Claude controlled access to your PC.
+
+### Setup
+
+1. Start the AgentOS kernel:
+```bash
+./build/agentos_kernel
+```
+
+2. Add to Claude Desktop config (`~/.config/Claude/claude_desktop_config.json`):
+```json
+{
+  "mcpServers": {
+    "agentos": {
+      "command": "python3",
+      "args": ["/path/to/AGENTOS/agents/mcp/mcp_server.py"]
+    }
+  }
+}
+```
+
+3. Restart Claude Desktop
+
+### Available Tools
+
+Once configured, Claude Desktop can use these tools:
+
+| Tool | Description |
+|------|-------------|
+| `agentos_read` | Read files from filesystem |
+| `agentos_write` | Write content to files |
+| `agentos_exec` | Execute shell commands |
+| `agentos_think` | Query the LLM |
+| `agentos_spawn` | Spawn agent processes |
+| `agentos_list_agents` | List running agents |
+| `agentos_kill` | Kill an agent |
+| `agentos_http` | Make HTTP requests |
+
+See `agents/mcp/README.md` for detailed documentation.
+
 ## Syscall Reference
 
 | Opcode | Name | Description | Payload | Response |
 |--------|------|-------------|---------|----------|
 | 0x00 | SYS_NOOP | Echo test | Any bytes | Same bytes |
 | 0x01 | SYS_THINK | LLM query | JSON (see below) | JSON: `{success, content, tokens, error}` |
+| 0x02 | SYS_READ | Read file | JSON: `{path}` | JSON: `{success, content, size}` |
+| 0x03 | SYS_WRITE | Write file | JSON: `{path, content, mode}` | JSON: `{success, bytes_written}` |
+| 0x04 | SYS_EXEC | Execute command | JSON: `{command, cwd, timeout}` | JSON: `{success, stdout, stderr, exit_code}` |
 | 0x10 | SYS_SPAWN | Spawn agent | JSON config | JSON: `{id, name, pid, status}` |
 | 0x11 | SYS_KILL | Kill agent | JSON: `{name}` or `{id}` | JSON: `{killed: bool}` |
 | 0x12 | SYS_LIST | List agents | Empty | JSON array of agents |
+| 0x40 | SYS_GET_PERMS | Get permissions | Empty | JSON: permission object |
+| 0x41 | SYS_SET_PERMS | Set permissions | JSON: permission config | JSON: `{success}` |
+| 0x50 | SYS_HTTP | HTTP request | JSON: `{url, method, headers, body}` | JSON: `{success, status_code, body}` |
 | 0xFF | SYS_EXIT | Disconnect | Empty | "goodbye" |
 
 ### SYS_THINK Request Format
@@ -348,7 +502,8 @@ AgentOS/
 │   ├── kernel/
 │   │   ├── kernel.hpp/cpp       # Main kernel class
 │   │   ├── reactor.hpp/cpp      # epoll event loop
-│   │   └── llm_client.hpp/cpp   # LLM subprocess manager
+│   │   ├── llm_client.hpp/cpp   # LLM subprocess manager
+│   │   └── permissions.hpp/cpp  # Permission system
 │   ├── ipc/
 │   │   ├── protocol.hpp         # Binary protocol definition
 │   │   └── socket_server.hpp/cpp # Unix socket server
@@ -363,6 +518,14 @@ AgentOS/
 │   ├── llm_service/
 │   │   ├── llm_service.py       # Python LLM subprocess (google-genai)
 │   │   └── requirements.txt     # Python dependencies
+│   ├── mcp/                     # MCP Server for Claude Desktop
+│   │   ├── mcp_server.py        # MCP protocol server
+│   │   └── README.md            # Installation instructions
+│   ├── adapters/                # Framework adapters
+│   │   ├── langchain_adapter.py # LangChain integration
+│   │   ├── crewai_adapter.py    # CrewAI integration
+│   │   ├── autogen_adapter.py   # AutoGen integration
+│   │   └── README.md            # Adapter documentation
 │   └── examples/
 │       ├── hello_agent.py       # Echo test
 │       ├── thinking_agent.py    # LLM interaction

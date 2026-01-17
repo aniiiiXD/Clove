@@ -23,6 +23,16 @@ enum class SyscallOp : uint8_t {
     SYS_SPAWN  = 0x10,  // Spawn a sandboxed agent
     SYS_KILL   = 0x11,  // Kill an agent
     SYS_LIST   = 0x12,  // List running agents
+    // IPC - Inter-Agent Communication
+    SYS_SEND      = 0x20,  // Send message to another agent
+    SYS_RECV      = 0x21,  // Receive pending messages
+    SYS_BROADCAST = 0x22,  // Broadcast message to all agents
+    SYS_REGISTER  = 0x23,  // Register agent name
+    // Permissions
+    SYS_GET_PERMS = 0x40,  // Get own permissions
+    SYS_SET_PERMS = 0x41,  // Set agent permissions (privileged)
+    // Network
+    SYS_HTTP      = 0x50,  // Make HTTP request
     SYS_EXIT   = 0xFF   // Graceful shutdown
 };
 
@@ -142,15 +152,22 @@ struct Message {
 // Convert opcode to string for logging
 inline const char* opcode_to_string(SyscallOp op) {
     switch (op) {
-        case SyscallOp::SYS_NOOP:  return "NOOP";
-        case SyscallOp::SYS_THINK: return "THINK";
-        case SyscallOp::SYS_EXEC:  return "EXEC";
-        case SyscallOp::SYS_READ:  return "READ";
-        case SyscallOp::SYS_WRITE: return "WRITE";
-        case SyscallOp::SYS_SPAWN: return "SPAWN";
-        case SyscallOp::SYS_KILL:  return "KILL";
-        case SyscallOp::SYS_LIST:  return "LIST";
-        case SyscallOp::SYS_EXIT:  return "EXIT";
+        case SyscallOp::SYS_NOOP:      return "NOOP";
+        case SyscallOp::SYS_THINK:     return "THINK";
+        case SyscallOp::SYS_EXEC:      return "EXEC";
+        case SyscallOp::SYS_READ:      return "READ";
+        case SyscallOp::SYS_WRITE:     return "WRITE";
+        case SyscallOp::SYS_SPAWN:     return "SPAWN";
+        case SyscallOp::SYS_KILL:      return "KILL";
+        case SyscallOp::SYS_LIST:      return "LIST";
+        case SyscallOp::SYS_SEND:      return "SEND";
+        case SyscallOp::SYS_RECV:      return "RECV";
+        case SyscallOp::SYS_BROADCAST: return "BROADCAST";
+        case SyscallOp::SYS_REGISTER:  return "REGISTER";
+        case SyscallOp::SYS_GET_PERMS: return "GET_PERMS";
+        case SyscallOp::SYS_SET_PERMS: return "SET_PERMS";
+        case SyscallOp::SYS_HTTP:      return "HTTP";
+        case SyscallOp::SYS_EXIT:      return "EXIT";
         default: return "UNKNOWN";
     }
 }

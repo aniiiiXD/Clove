@@ -2,12 +2,26 @@
 #include <string>
 #include <memory>
 #include <atomic>
+#include <queue>
+#include <unordered_map>
+#include <mutex>
+#include <chrono>
 #include "kernel/reactor.hpp"
 #include "kernel/llm_client.hpp"
+#include "kernel/permissions.hpp"
 #include "ipc/socket_server.hpp"
 #include "runtime/agent_process.hpp"
+#include <nlohmann/json.hpp>
 
 namespace agentos::kernel {
+
+// IPC Message for agent-to-agent communication
+struct IPCMessage {
+    uint32_t from_id;
+    std::string from_name;
+    nlohmann::json message;
+    std::chrono::steady_clock::time_point timestamp;
+};
 
 // Kernel configuration
 struct KernelConfig {
@@ -53,6 +67,22 @@ private:
     std::unique_ptr<runtime::AgentManager> agent_manager_;
     std::unique_ptr<LLMClient> llm_client_;
 
+    // IPC: Agent mailboxes (message queues per agent)
+    std::unordered_map<uint32_t, std::queue<IPCMessage>> agent_mailboxes_;
+    std::mutex mailbox_mutex_;
+
+    // IPC: Agent name registry (name -> agent_id)
+    std::unordered_map<std::string, uint32_t> agent_names_;
+    std::unordered_map<uint32_t, std::string> agent_ids_to_names_;
+    std::mutex registry_mutex_;
+
+    // Permissions: Per-agent permissions
+    std::unordered_map<uint32_t, AgentPermissions> agent_permissions_;
+    std::mutex permissions_mutex_;
+
+    // Get or create permissions for an agent
+    AgentPermissions& get_agent_permissions(uint32_t agent_id);
+
     // Event handlers
     void on_server_event(int fd, uint32_t events);
     void on_client_event(int fd, uint32_t events);
@@ -65,6 +95,22 @@ private:
     ipc::Message handle_spawn(const ipc::Message& msg);
     ipc::Message handle_kill(const ipc::Message& msg);
     ipc::Message handle_list(const ipc::Message& msg);
+    ipc::Message handle_exec(const ipc::Message& msg);
+    ipc::Message handle_read(const ipc::Message& msg);
+    ipc::Message handle_write(const ipc::Message& msg);
+
+    // IPC syscall handlers
+    ipc::Message handle_send(const ipc::Message& msg);
+    ipc::Message handle_recv(const ipc::Message& msg);
+    ipc::Message handle_broadcast(const ipc::Message& msg);
+    ipc::Message handle_register(const ipc::Message& msg);
+
+    // Permission syscall handlers
+    ipc::Message handle_get_perms(const ipc::Message& msg);
+    ipc::Message handle_set_perms(const ipc::Message& msg);
+
+    // Network syscall handlers
+    ipc::Message handle_http(const ipc::Message& msg);
 
     // Update client in reactor (for write events)
     void update_client_events(int fd);

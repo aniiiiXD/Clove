@@ -28,6 +28,16 @@ class SyscallOp(IntEnum):
     SYS_SPAWN = 0x10  # Spawn a sandboxed agent
     SYS_KILL = 0x11   # Kill an agent
     SYS_LIST = 0x12   # List running agents
+    # IPC - Inter-Agent Communication
+    SYS_SEND = 0x20       # Send message to another agent
+    SYS_RECV = 0x21       # Receive pending messages
+    SYS_BROADCAST = 0x22  # Broadcast message to all agents
+    SYS_REGISTER = 0x23   # Register agent name
+    # Permissions
+    SYS_GET_PERMS = 0x40  # Get own permissions
+    SYS_SET_PERMS = 0x41  # Set agent permissions
+    # Network
+    SYS_HTTP = 0x50       # Make HTTP request
     SYS_EXIT = 0xFF   # Graceful shutdown
 
 
@@ -271,6 +281,265 @@ class AgentOSClient:
         if response:
             return json.loads(response.payload_str)
         return []
+
+    def exec(self, command: str, cwd: str = None, timeout: int = 30) -> dict:
+        """Execute a shell command.
+
+        Args:
+            command: The shell command to execute
+            cwd: Optional working directory
+            timeout: Timeout in seconds (default: 30)
+
+        Returns:
+            dict with 'success', 'stdout', 'stderr', 'exit_code'
+        """
+        import json
+        payload = {
+            "command": command,
+            "timeout": timeout
+        }
+        if cwd:
+            payload["cwd"] = cwd
+
+        response = self.call(SyscallOp.SYS_EXEC, json.dumps(payload))
+        if response:
+            try:
+                return json.loads(response.payload_str)
+            except json.JSONDecodeError:
+                return {"success": False, "stdout": "", "stderr": response.payload_str, "exit_code": -1}
+        return {"success": False, "stdout": "", "stderr": "No response from kernel", "exit_code": -1}
+
+    def read_file(self, path: str) -> dict:
+        """Read a file's contents.
+
+        Args:
+            path: Path to the file to read
+
+        Returns:
+            dict with 'success', 'content', 'size'
+        """
+        import json
+        payload = {"path": path}
+
+        response = self.call(SyscallOp.SYS_READ, json.dumps(payload))
+        if response:
+            try:
+                return json.loads(response.payload_str)
+            except json.JSONDecodeError:
+                return {"success": False, "content": "", "size": 0, "error": response.payload_str}
+        return {"success": False, "content": "", "size": 0, "error": "No response from kernel"}
+
+    def write_file(self, path: str, content: str, mode: str = "write") -> dict:
+        """Write content to a file.
+
+        Args:
+            path: Path to the file to write
+            content: Content to write
+            mode: "write" (overwrite) or "append"
+
+        Returns:
+            dict with 'success', 'bytes_written'
+        """
+        import json
+        payload = {
+            "path": path,
+            "content": content,
+            "mode": mode
+        }
+
+        response = self.call(SyscallOp.SYS_WRITE, json.dumps(payload))
+        if response:
+            try:
+                return json.loads(response.payload_str)
+            except json.JSONDecodeError:
+                return {"success": False, "bytes_written": 0, "error": response.payload_str}
+        return {"success": False, "bytes_written": 0, "error": "No response from kernel"}
+
+    # =========================================================================
+    # IPC - Inter-Agent Communication
+    # =========================================================================
+
+    def register_name(self, name: str) -> dict:
+        """Register this agent with a name for IPC.
+
+        Args:
+            name: Unique name for this agent (e.g., "worker-1", "orchestrator")
+
+        Returns:
+            dict with 'success', 'agent_id', 'name'
+        """
+        import json
+        payload = {"name": name}
+
+        response = self.call(SyscallOp.SYS_REGISTER, json.dumps(payload))
+        if response:
+            try:
+                return json.loads(response.payload_str)
+            except json.JSONDecodeError:
+                return {"success": False, "error": response.payload_str}
+        return {"success": False, "error": "No response from kernel"}
+
+    def send(self, message: dict, to: int = None, to_name: str = None) -> dict:
+        """Send a message to another agent.
+
+        Args:
+            message: The message payload (any JSON-serializable dict)
+            to: Target agent ID
+            to_name: Target agent name (alternative to 'to')
+
+        Returns:
+            dict with 'success', 'delivered_to'
+        """
+        import json
+        payload = {"message": message}
+
+        if to is not None:
+            payload["to"] = to
+        if to_name is not None:
+            payload["to_name"] = to_name
+
+        response = self.call(SyscallOp.SYS_SEND, json.dumps(payload))
+        if response:
+            try:
+                return json.loads(response.payload_str)
+            except json.JSONDecodeError:
+                return {"success": False, "error": response.payload_str}
+        return {"success": False, "error": "No response from kernel"}
+
+    def recv(self, max_messages: int = 10) -> dict:
+        """Receive pending messages from other agents.
+
+        Args:
+            max_messages: Maximum number of messages to retrieve (default: 10)
+
+        Returns:
+            dict with 'success', 'messages' (list), 'count'
+            Each message has: 'from', 'from_name', 'message', 'age_ms'
+        """
+        import json
+        payload = {"max": max_messages}
+
+        response = self.call(SyscallOp.SYS_RECV, json.dumps(payload))
+        if response:
+            try:
+                return json.loads(response.payload_str)
+            except json.JSONDecodeError:
+                return {"success": False, "messages": [], "count": 0, "error": response.payload_str}
+        return {"success": False, "messages": [], "count": 0, "error": "No response from kernel"}
+
+    def broadcast(self, message: dict, include_self: bool = False) -> dict:
+        """Broadcast a message to all registered agents.
+
+        Args:
+            message: The message payload (any JSON-serializable dict)
+            include_self: Whether to include self in broadcast (default: False)
+
+        Returns:
+            dict with 'success', 'delivered_count'
+        """
+        import json
+        payload = {
+            "message": message,
+            "include_self": include_self
+        }
+
+        response = self.call(SyscallOp.SYS_BROADCAST, json.dumps(payload))
+        if response:
+            try:
+                return json.loads(response.payload_str)
+            except json.JSONDecodeError:
+                return {"success": False, "delivered_count": 0, "error": response.payload_str}
+        return {"success": False, "delivered_count": 0, "error": "No response from kernel"}
+
+    # =========================================================================
+    # Permissions
+    # =========================================================================
+
+    def get_permissions(self) -> dict:
+        """Get this agent's permissions.
+
+        Returns:
+            dict with 'success', 'permissions'
+        """
+        import json
+        response = self.call(SyscallOp.SYS_GET_PERMS, "{}")
+        if response:
+            try:
+                return json.loads(response.payload_str)
+            except json.JSONDecodeError:
+                return {"success": False, "error": response.payload_str}
+        return {"success": False, "error": "No response from kernel"}
+
+    def set_permissions(self, permissions: dict = None, level: str = None,
+                       agent_id: int = None) -> dict:
+        """Set agent permissions.
+
+        Args:
+            permissions: Full permissions dict (optional)
+            level: Permission level: "unrestricted", "standard", "sandboxed", "readonly", "minimal"
+            agent_id: Target agent ID (default: self)
+
+        Returns:
+            dict with 'success', 'agent_id'
+        """
+        import json
+        payload = {}
+
+        if permissions:
+            payload["permissions"] = permissions
+        if level:
+            payload["level"] = level
+        if agent_id is not None:
+            payload["agent_id"] = agent_id
+
+        response = self.call(SyscallOp.SYS_SET_PERMS, json.dumps(payload))
+        if response:
+            try:
+                return json.loads(response.payload_str)
+            except json.JSONDecodeError:
+                return {"success": False, "error": response.payload_str}
+        return {"success": False, "error": "No response from kernel"}
+
+    # =========================================================================
+    # HTTP
+    # =========================================================================
+
+    def http(self, url: str, method: str = "GET", headers: dict = None,
+             body: str = None, timeout: int = 30) -> dict:
+        """Make an HTTP request.
+
+        Args:
+            url: The URL to request
+            method: HTTP method (GET, POST, PUT, DELETE, etc.)
+            headers: Optional request headers
+            body: Optional request body (for POST/PUT)
+            timeout: Request timeout in seconds
+
+        Returns:
+            dict with 'success', 'body', 'status_code'
+
+        Note:
+            Requires HTTP permission and domain to be in whitelist.
+        """
+        import json
+        payload = {
+            "url": url,
+            "method": method,
+            "timeout": timeout
+        }
+
+        if headers:
+            payload["headers"] = headers
+        if body:
+            payload["body"] = body
+
+        response = self.call(SyscallOp.SYS_HTTP, json.dumps(payload))
+        if response:
+            try:
+                return json.loads(response.payload_str)
+            except json.JSONDecodeError:
+                return {"success": False, "body": "", "error": response.payload_str}
+        return {"success": False, "body": "", "error": "No response from kernel"}
 
     def __enter__(self):
         self.connect()

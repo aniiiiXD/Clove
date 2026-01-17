@@ -49,6 +49,54 @@ def get_client():
     return genai.Client(api_key=api_key)
 
 
+def convert_tools_to_gemini(tools: list) -> list:
+    """Convert tool definitions to Gemini FunctionDeclaration format"""
+    declarations = []
+    for tool in tools:
+        name = tool.get("name", "")
+        description = tool.get("description", "")
+        parameters = tool.get("parameters", {})
+
+        # Convert JSON Schema to Gemini Schema
+        gemini_params = {}
+        if parameters.get("type") == "object":
+            props = parameters.get("properties", {})
+            required = parameters.get("required", [])
+
+            gemini_props = {}
+            for prop_name, prop_def in props.items():
+                prop_type = prop_def.get("type", "string").upper()
+                # Map JSON Schema types to Gemini types
+                type_map = {
+                    "STRING": "STRING",
+                    "NUMBER": "NUMBER",
+                    "INTEGER": "INTEGER",
+                    "BOOLEAN": "BOOLEAN",
+                    "ARRAY": "ARRAY",
+                    "OBJECT": "OBJECT"
+                }
+                gemini_type = type_map.get(prop_type, "STRING")
+
+                gemini_props[prop_name] = types.Schema(
+                    type=gemini_type,
+                    description=prop_def.get("description", "")
+                )
+
+            gemini_params = types.Schema(
+                type="OBJECT",
+                properties=gemini_props,
+                required=required
+            )
+
+        declarations.append(types.FunctionDeclaration(
+            name=name,
+            description=description,
+            parameters=gemini_params if gemini_params else None
+        ))
+
+    return declarations
+
+
 def handle_request(client, request: dict) -> dict:
     """Process a single LLM request"""
     try:
@@ -94,6 +142,18 @@ def handle_request(client, request: dict) -> dict:
         if thinking_config:
             config_args["thinking_config"] = thinking_config
 
+        # Handle tools/function calling
+        tools_config = None
+        if "tools" in request and request["tools"]:
+            try:
+                tool_declarations = convert_tools_to_gemini(request["tools"])
+                if tool_declarations:
+                    tools_config = [types.Tool(function_declarations=tool_declarations)]
+                    config_args["tools"] = tools_config
+            except Exception as tool_error:
+                # Log but don't fail - proceed without tools
+                pass
+
         # Create config object if we have any config
         config = types.GenerateContentConfig(**config_args) if config_args else None
 
@@ -109,11 +169,29 @@ def handle_request(client, request: dict) -> dict:
         if hasattr(response, 'usage_metadata') and response.usage_metadata:
             tokens = getattr(response.usage_metadata, 'total_token_count', 0)
 
-        return {
+        # Check for function calls in response
+        function_calls = []
+        if hasattr(response, 'candidates') and response.candidates:
+            for candidate in response.candidates:
+                if hasattr(candidate, 'content') and candidate.content:
+                    for part in candidate.content.parts:
+                        if hasattr(part, 'function_call') and part.function_call:
+                            fc = part.function_call
+                            function_calls.append({
+                                "name": fc.name,
+                                "arguments": dict(fc.args) if fc.args else {}
+                            })
+
+        result = {
             "success": True,
-            "content": response.text,
+            "content": response.text if hasattr(response, 'text') else "",
             "tokens": tokens
         }
+
+        if function_calls:
+            result["function_calls"] = function_calls
+
+        return result
 
     except Exception as e:
         return {

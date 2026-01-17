@@ -29,6 +29,7 @@ add_executable(agentos_kernel
     src/kernel/kernel.cpp
     src/kernel/reactor.cpp
     src/kernel/llm_client.cpp
+    src/kernel/permissions.cpp
     src/ipc/socket_server.cpp
     src/runtime/sandbox.cpp
     src/runtime/agent_process.cpp
