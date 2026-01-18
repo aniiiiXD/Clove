@@ -278,10 +278,13 @@ Orchestrator → Parser → Reasoner → Verifier → Orchestrator
 - `supervisor_demo.py` - PID 1 semantics demo
 - `supervisor_agent.py` - Implements systemd-style supervision
 - `unstable_agent.py` - Test agent that crashes randomly
-- `pipeline_demo.py` - **NEW** - Agent pipeline with real IPC
-- `parser_agent.py` - **NEW** - Pipeline stage 1: parse input
-- `reasoner_agent.py` - **NEW** - Pipeline stage 2: compute results
-- `verifier_agent.py` - **NEW** - Pipeline stage 3: verify correctness
+- `pipeline_demo.py` - Agent pipeline with real IPC
+- `parser_agent.py` - Pipeline stage 1: parse input
+- `reasoner_agent.py` - Pipeline stage 2: compute results
+- `verifier_agent.py` - Pipeline stage 3: verify correctness
+- `ipc_demo.py` - Inter-agent communication demonstration
+- `coding_agent.py` - Code generation agent using LLM
+- `fibonacci_orchestrator.py` - Multi-agent orchestration example
 
 ---
 
@@ -467,7 +470,10 @@ AGENTOS/
 │       ├── fault_isolation_demo.py  # OS-level fault isolation
 │       ├── cpu_hog_agent.py      # CPU stress test
 │       ├── memory_hog_agent.py   # Memory stress test
-│       └── healthy_agent.py      # Well-behaved agent
+│       ├── healthy_agent.py      # Well-behaved agent
+│       ├── ipc_demo.py           # Inter-agent communication demo
+│       ├── coding_agent.py       # Code generation agent
+│       └── fibonacci_orchestrator.py # Multi-agent orchestration
 ├── build/
 │   └── agentos_kernel
 ├── CMakeLists.txt
