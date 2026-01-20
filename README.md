@@ -1,24 +1,24 @@
-# AgentOS
+# Clove
 
 A microkernel operating system for AI agents. Run multiple autonomous agents as isolated processes with OS-level guarantees.
 
 > **"systemd for AI agents"** | **"Docker-lite for autonomous compute"**
 
-## Why AgentOS?
+## Why Clove?
 
 **The Problem:** Python agent frameworks (LangChain, CrewAI, AutoGen) run agents as coroutines or threads. When one agent crashes, leaks memory, or infinite loops - it takes down the entire system.
 
-**The Solution:** AgentOS provides **OS-level isolation**. Each agent is a real process with:
+**The Solution:** Clove provides **OS-level isolation**. Each agent is a real process with:
 - **Fault isolation** - One agent crashes, others continue
 - **Resource limits** - Memory/CPU caps enforced by the kernel (cgroups)
 - **Security sandboxing** - Untrusted agents can't access filesystem/network
 - **Fair scheduling** - Shared LLM access with rate limiting
 
-**This is literally why operating systems exist** - and AgentOS brings these guarantees to AI agents.
+**This is literally why operating systems exist** - and Clove brings these guarantees to AI agents.
 
-### What AgentOS Can Do That Python Frameworks Can't
+### What Clove Can Do That Python Frameworks Can't
 
-| Scenario | Python Frameworks | AgentOS |
+| Scenario | Python Frameworks | Clove |
 |----------|-------------------|---------|
 | Agent infinite loops | Entire system hangs | Agent throttled, others continue |
 | Agent memory leak | OOM kills everything | Only that agent killed |
@@ -30,7 +30,7 @@ A microkernel operating system for AI agents. Run multiple autonomous agents as 
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    AgentOS Kernel (C++23)                        │
+│                    Clove Kernel (C++23)                          │
 │  ┌─────────────┐  ┌─────────────────┐  ┌─────────────────────┐  │
 │  │   Reactor   │  │   LLM Client    │  │   Agent Manager     │  │
 │  │   (epoll)   │  │ (subprocess)    │  │   (Sandbox/Fork)    │  │
@@ -38,7 +38,7 @@ A microkernel operating system for AI agents. Run multiple autonomous agents as 
 │         │                  │                       │             │
 │         └──────────────────┼───────────────────────┘             │
 │                            │                                     │
-│              Unix Domain Socket (/tmp/agentos.sock)              │
+│              Unix Domain Socket (/tmp/clove.sock)                │
 └────────────────────────────┼─────────────────────────────────────┘
                              │
         ┌────────────────────┼────────────────────┐
@@ -71,7 +71,7 @@ A microkernel operating system for AI agents. Run multiple autonomous agents as 
 
 ## Web Dashboard
 
-Real-time browser-based monitoring for AgentOS agents.
+Real-time browser-based monitoring for Clove agents.
 
 ```
 Browser (localhost:8000) → WebSocket → ws_proxy.py → Unix Socket → Kernel
@@ -80,7 +80,7 @@ Browser (localhost:8000) → WebSocket → ws_proxy.py → Unix Socket → Kerne
 **Quick Start:**
 ```bash
 # Terminal 1: Kernel
-./build/agentos_kernel
+./build/clove
 
 # Terminal 2: WebSocket proxy
 python3 agents/dashboard/ws_proxy.py
@@ -104,7 +104,7 @@ from agentic import run_task, AgenticLoop
 result = run_task("Create a hello.py and run it")
 
 # With more control
-with AgentOSClient() as client:
+with CloveClient() as client:
     loop = AgenticLoop(client, max_iterations=20)
     result = loop.run("List all Python files and count them")
 ```
@@ -113,48 +113,48 @@ with AgentOSClient() as client:
 
 ## Cloud Deployment (CLI)
 
-Deploy AgentOS kernels anywhere with a single command.
+Deploy Clove kernels anywhere with a single command.
 
 ```bash
 # Install CLI
 pip install -e cli/
 
 # Deploy to Docker
-$ agentos deploy docker --name dev-kernel
-Creating AgentOS kernel container...
+$ clove deploy docker --name dev-kernel
+Creating Clove kernel container...
   Machine ID: docker-dev-kernel-a1b2
   Status: Running ✓
 
 # Deploy to AWS
-$ agentos deploy aws --region us-east-1
+$ clove deploy aws --region us-east-1
 Provisioning AWS EC2 instance...
   Machine ID: aws-i-0abc123-us-east-1
-  SSH: ssh -i ~/.ssh/agentos.pem ubuntu@54.123.45.67
+  SSH: ssh -i ~/.ssh/clove.pem ubuntu@54.123.45.67
 
 # Deploy to GCP
-$ agentos deploy gcp --zone us-central1-a
+$ clove deploy gcp --zone us-central1-a
 Provisioning GCP Compute instance...
-  Machine ID: gcp-agentos-kernel-us-central1
+  Machine ID: gcp-clove-kernel-us-central1
 
 # Check fleet status
-$ agentos status
+$ clove status
 Connected Kernels: 3
 Active Agents: 5
 
 # Run agent remotely
-$ agentos agent run my_agent.py --machine docker-dev-kernel-a1b2
+$ clove agent run my_agent.py --machine docker-dev-kernel-a1b2
 ```
 
 **CLI Commands:**
 | Command | Description |
 |---------|-------------|
-| `agentos deploy docker` | Deploy to local Docker |
-| `agentos deploy aws` | Deploy to AWS EC2 |
-| `agentos deploy gcp` | Deploy to GCP Compute |
-| `agentos status` | Show fleet status |
-| `agentos machines list` | List all machines |
-| `agentos agent run <script>` | Run agent on machine |
-| `agentos tokens create` | Create auth tokens |
+| `clove deploy docker` | Deploy to local Docker |
+| `clove deploy aws` | Deploy to AWS EC2 |
+| `clove deploy gcp` | Deploy to GCP Compute |
+| `clove status` | Show fleet status |
+| `clove machines list` | List all machines |
+| `clove agent run <script>` | Run agent on machine |
+| `clove tokens create` | Create auth tokens |
 
 ## Remote Connectivity
 
@@ -163,7 +163,7 @@ Cloud agents connect to your local kernel through a relay server:
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                         YOUR TERMINAL                            │
-│  $ agentos deploy aws    $ agentos status    $ agentos agent run│
+│  $ clove deploy aws    $ clove status    $ clove agent run      │
 └───────────────────────────────┬─────────────────────────────────┘
                                 │
                                 ▼
@@ -179,7 +179,7 @@ Cloud agents connect to your local kernel through a relay server:
          ▼                   ▼                   ▼
 ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
 │  AWS EC2        │ │  GCP Compute    │ │  Docker Local   │
-│  AgentOS Kernel │ │  AgentOS Kernel │ │  AgentOS Kernel │
+│  Clove Kernel   │ │  Clove Kernel   │ │  Clove Kernel   │
 └─────────────────┘ └─────────────────┘ └─────────────────┘
 ```
 
@@ -190,11 +190,11 @@ cd relay && python3 relay_server.py --dev
 
 ## Future Directions
 
-AgentOS's sandbox architecture opens up possibilities beyond just running agents safely.
+Clove's sandbox architecture opens up possibilities beyond just running agents safely.
 
 ### Agent & Workflow Benchmarking
 
-The isolated, resource-controlled environment makes AgentOS ideal for **reproducible agent benchmarks**:
+The isolated, resource-controlled environment makes Clove ideal for **reproducible agent benchmarks**:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -206,7 +206,7 @@ The isolated, resource-controlled environment makes AgentOS ideal for **reproduc
 │  ├─ Task 3: Debug failing test case                             │
 │  └─ Task 4: Refactor legacy function                            │
 ├─────────────────────────────────────────────────────────────────┤
-│                    AgentOS Kernel                                │
+│                    Clove Kernel                                  │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
 │  │ Agent A      │  │ Agent B      │  │ Agent C      │          │
 │  │ (GPT-4)      │  │ (Claude)     │  │ (Gemini)     │          │
@@ -222,7 +222,7 @@ The isolated, resource-controlled environment makes AgentOS ideal for **reproduc
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Why AgentOS for benchmarks:**
+**Why Clove for benchmarks:**
 - **Identical conditions** - Same resource limits, same sandboxing for all agents
 - **No interference** - Agents can't affect each other's performance
 - **Reproducible** - Controlled environment ensures consistent results
@@ -261,7 +261,7 @@ The sandbox primitives can be extended to create **controlled virtual worlds** f
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    AgentOS World Instance                        │
+│                    Clove World Instance                          │
 │  ┌────────────────────────────────────────────────────────────┐ │
 │  │  Simulated Filesystem    │  Simulated Network              │ │
 │  │  - Virtual /app          │  - Mock HTTP responses          │ │
@@ -310,8 +310,8 @@ The sandbox primitives can be extended to create **controlled virtual worlds** f
 ### 1. Clone and Setup
 
 ```bash
-git clone <your-repo-url> AgentOS
-cd AgentOS
+git clone <your-repo-url> Clove
+cd Clove
 
 # Install vcpkg if you don't have it
 git clone https://github.com/Microsoft/vcpkg.git ~/vcpkg
@@ -350,7 +350,7 @@ make -j$(nproc)
 ```python
 from agentos import AgentOSClient
 
-with AgentOSClient() as client:
+with CloveClient() as client:
     # LLM query
     result = client.think("What is 2+2?")
     print(result['content'])
@@ -388,11 +388,11 @@ Features:
 
 ## Framework Integration
 
-AgentOS adapters for existing frameworks - all operations go through the permission system:
+Clove adapters for existing frameworks - all operations go through the permission system:
 
-- **LangChain** - `AgentOSToolkit` provides tools for any LangChain agent
-- **CrewAI** - `AgentOSCrewAgent` factory with pre-built agent types
-- **AutoGen** - `AgentOSAssistant` and `AgentOSUserProxy` for multi-agent chat
+- **LangChain** - `CloveToolkit` provides tools for any LangChain agent
+- **CrewAI** - `CloveCrewAgent` factory with pre-built agent types
+- **AutoGen** - `CloveAssistant` and `CloveUserProxy` for multi-agent chat
 - **MCP** - Claude Desktop integration via Model Context Protocol
 
 ## Syscall Reference
@@ -415,7 +415,7 @@ AgentOS adapters for existing frameworks - all operations go through the permiss
 ## Project Structure
 
 ```
-AgentOS/
+Clove/
 ├── src/
 │   ├── main.cpp
 │   ├── kernel/           # Kernel, reactor, LLM client, permissions
@@ -429,8 +429,8 @@ AgentOS/
 │   ├── mcp/              # MCP server for Claude Desktop
 │   ├── adapters/         # LangChain, CrewAI, AutoGen adapters
 │   └── examples/         # Demo agents
-├── cli/                  # AgentOS CLI tool
-│   ├── agentos.py        # Main entry point
+├── cli/                  # Clove CLI tool
+│   ├── clove.py          # Main entry point
 │   ├── config.py         # Configuration management
 │   ├── relay_api.py      # Relay REST API client
 │   └── commands/         # CLI commands (deploy, status, machines, agent, tokens)
