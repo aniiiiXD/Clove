@@ -16,7 +16,7 @@ endif()
 find_package(fmt CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
-find_package(httplib CONFIG REQUIRED)
+# OpenSSL for potential future HTTPS syscalls
 find_package(OpenSSL REQUIRED)
 
 # Optional: io_uring (for modern Linux)
@@ -45,7 +45,6 @@ target_link_libraries(agentos_kernel PRIVATE
     fmt::fmt
     spdlog::spdlog
     nlohmann_json::nlohmann_json
-    httplib::httplib
     OpenSSL::SSL
     OpenSSL::Crypto
     pthread

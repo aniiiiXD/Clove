@@ -1,3 +1,9 @@
+/**
+ * AgentOS Permission System
+ *
+ * Controls what agents can do: file access, command execution,
+ * HTTP requests, LLM usage. Uses glob patterns for path matching.
+ */
 #pragma once
 #include <string>
 #include <vector>

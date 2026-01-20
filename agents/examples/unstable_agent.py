@@ -36,7 +36,7 @@ def main():
 
         # Send heartbeat to supervisor
         if client._sock:
-            client.send(
+            client.send_message(
                 message={"type": "heartbeat", "iteration": iteration, "agent": agent_name},
                 to_name="supervisor"
             )
@@ -45,7 +45,7 @@ def main():
             print(f"[{agent_name}] CRASHING NOW!")
             # Simulate crash
             if client._sock:
-                client.send(
+                client.send_message(
                     message={"type": "crash", "agent": agent_name},
                     to_name="supervisor"
                 )

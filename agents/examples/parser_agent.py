@@ -42,19 +42,30 @@ def parse_math_expression(text):
     }
 
 
+def log(msg):
+    """Debug log to file"""
+    with open('/tmp/parser_agent.log', 'a') as f:
+        f.write(f"{msg}\n")
+        f.flush()
+
 def main():
-    print("[PARSER] Starting parser agent")
+    log("[PARSER] Starting parser agent")
+    print("[PARSER] Starting parser agent", flush=True)
 
     # Connect to kernel
     client = AgentOSClient()
+    log(f"[PARSER] Connecting...")
     if not client.connect():
-        print("[PARSER] ERROR: Failed to connect to kernel")
+        log("[PARSER] ERROR: Failed to connect to kernel")
+        print("[PARSER] ERROR: Failed to connect to kernel", flush=True)
         return 1
 
+    log("[PARSER] Connected, registering...")
     # Register
     result = client.register_name("parser")
+    log(f"[PARSER] Register result: {result}")
     if result.get("success"):
-        print(f"[PARSER] Registered (id={result.get('agent_id')})")
+        print(f"[PARSER] Registered (id={result.get('agent_id')})", flush=True)
 
     print("[PARSER] Waiting for input from orchestrator...")
 
@@ -62,7 +73,7 @@ def main():
     processed = 0
     while processed < 5:  # Process up to 5 messages then exit
         # Check for messages
-        recv_result = client.recv(max_messages=1)
+        recv_result = client.recv_messages(max_messages=1)
 
         if recv_result.get('success') and recv_result.get('count', 0) > 0:
             for msg in recv_result.get('messages', []):
@@ -82,7 +93,7 @@ def main():
                     print(f"[PARSER] Parsed: numbers={parsed['numbers']}, op={parsed['operation']}")
 
                     # Send to reasoner
-                    send_result = client.send(
+                    send_result = client.send_message(
                         message=parsed,
                         to_name="reasoner"
                     )

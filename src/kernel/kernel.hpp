@@ -1,3 +1,13 @@
+/**
+ * AgentOS Kernel
+ *
+ * Main kernel class that orchestrates all subsystems:
+ * - Reactor (epoll event loop)
+ * - SocketServer (Unix domain socket IPC)
+ * - AgentManager (process lifecycle)
+ * - LLMClient (Gemini API subprocess)
+ * - Permissions (access control)
+ */
 #pragma once
 #include <string>
 #include <memory>
@@ -57,6 +67,12 @@ public:
 
     // Access to agent manager
     runtime::AgentManager& agents() { return *agent_manager_; }
+
+    // Get actual LLM model (after env loading)
+    std::string get_llm_model() const;
+
+    // Get config
+    const Config& get_config() const { return config_; }
 
 private:
     Config config_;

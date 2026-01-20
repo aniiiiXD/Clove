@@ -1,3 +1,10 @@
+/**
+ * AgentOS Wire Protocol
+ *
+ * Binary protocol for kernel <-> agent communication.
+ * Header: 17 bytes (magic + agent_id + opcode + payload_size)
+ * See docs/syscalls.md for full syscall reference.
+ */
 #pragma once
 #include <cstdint>
 #include <cstring>

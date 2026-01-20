@@ -1,3 +1,10 @@
+/**
+ * AgentOS Sandbox
+ *
+ * Process isolation using Linux namespaces (PID, NET, MNT, UTS)
+ * and cgroups v2 for resource limits (memory, CPU, PIDs).
+ * Requires root/CAP_SYS_ADMIN for full isolation.
+ */
 #pragma once
 #include <string>
 #include <vector>

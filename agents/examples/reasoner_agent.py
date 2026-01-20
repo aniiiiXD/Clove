@@ -61,7 +61,7 @@ def main():
     processed = 0
     while processed < 5:
         # Check for messages
-        recv_result = client.recv(max_messages=1)
+        recv_result = client.recv_messages(max_messages=1)
 
         if recv_result.get('success') and recv_result.get('count', 0) > 0:
             for msg in recv_result.get('messages', []):
@@ -102,7 +102,7 @@ def main():
                     print(f"[REASONER] Result: {result_value} ({explanation[:50]}...)")
 
                     # Send to verifier
-                    send_result = client.send(
+                    send_result = client.send_message(
                         message=reasoned,
                         to_name="verifier"
                     )

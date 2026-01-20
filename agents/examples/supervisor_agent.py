@@ -149,7 +149,7 @@ class SupervisorAgent:
 
     def process_messages(self):
         """Process messages from children"""
-        result = self.client.recv(max_messages=10)
+        result = self.client.recv_messages(max_messages=10)
         if not result.get('success'):
             return
 

@@ -64,6 +64,50 @@ A microkernel operating system for AI agents. Run multiple autonomous agents as 
 | HTTP Syscall | Done | Make HTTP requests with domain restrictions |
 | MCP Server | Done | Claude Desktop integration via MCP protocol |
 | Framework Adapters | Done | LangChain, CrewAI, AutoGen integration |
+| Web Dashboard | Done | Real-time browser-based monitoring UI |
+| Agentic Loop | Done | Claude Code-style autonomous agent framework |
+
+## Web Dashboard
+
+Real-time browser-based monitoring for AgentOS agents.
+
+```
+Browser (localhost:8000) → WebSocket → ws_proxy.py → Unix Socket → Kernel
+```
+
+**Quick Start:**
+```bash
+# Terminal 1: Kernel
+./build/agentos_kernel
+
+# Terminal 2: WebSocket proxy
+python3 agents/dashboard/ws_proxy.py
+
+# Terminal 3: HTTP server
+cd agents/dashboard && python3 -m http.server 8000
+
+# Open: http://localhost:8000
+```
+
+**Features:** Live agent monitoring, spawn/kill from UI, process hierarchy, system stats, auto-reconnect.
+
+## Agentic Loop Framework
+
+LLM-powered autonomous agent that can execute commands, read/write files, and reason iteratively - similar to Claude Code.
+
+```python
+from agentic import run_task, AgenticLoop
+
+# Quick usage
+result = run_task("Create a hello.py and run it")
+
+# With more control
+with AgentOSClient() as client:
+    loop = AgenticLoop(client, max_iterations=20)
+    result = loop.run("List all Python files and count them")
+```
+
+**Features:** Iterative task execution, built-in tools (exec, read_file, write_file, done), conversation history, extensible tool system.
 
 ## Future Directions
 
@@ -300,7 +344,8 @@ AgentOS/
 │   ├── runtime/          # Sandbox (namespaces/cgroups) and agent lifecycle
 │   └── util/             # Logging utilities
 ├── agents/
-│   ├── python_sdk/       # Python client library
+│   ├── python_sdk/       # Python client library + agentic loop
+│   ├── dashboard/        # Web monitoring UI + WebSocket proxy
 │   ├── llm_service/      # LLM subprocess (google-genai)
 │   ├── mcp/              # MCP server for Claude Desktop
 │   ├── adapters/         # LangChain, CrewAI, AutoGen adapters

@@ -379,7 +379,7 @@ class AgentOSClient:
                 return {"success": False, "error": response.payload_str}
         return {"success": False, "error": "No response from kernel"}
 
-    def send(self, message: dict, to: int = None, to_name: str = None) -> dict:
+    def send_message(self, message: dict, to: int = None, to_name: str = None) -> dict:
         """Send a message to another agent.
 
         Args:
@@ -406,7 +406,7 @@ class AgentOSClient:
                 return {"success": False, "error": response.payload_str}
         return {"success": False, "error": "No response from kernel"}
 
-    def recv(self, max_messages: int = 10) -> dict:
+    def recv_messages(self, max_messages: int = 10) -> dict:
         """Receive pending messages from other agents.
 
         Args:
@@ -556,9 +556,9 @@ def connect(socket_path: str = '/tmp/agentos.sock') -> AgentOSClient:
     if not client.connect():
         raise ConnectionError(f"Failed to connect to {socket_path}")
     return client
+ 
 
-
-if __name__ == '__main__':
+if __name__ == '__main__': 
     # Quick test
     print("AgentOS Python SDK")
     print("==================")

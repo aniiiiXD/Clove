@@ -134,7 +134,7 @@ def wait_for_registration(client, agents, timeout=10):
 
         # Try sending a test message to each agent
         for name in agents:
-            result = client.send(
+            result = client.send_message(
                 message={"type": "ping"},
                 to_name=name
             )
@@ -155,7 +155,7 @@ def run_pipeline(client, query, request_id):
     print(f"\n  Query {request_id}: \"{query}\"")
 
     # Send to parser
-    result = client.send(
+    result = client.send_message(
         message={
             "type": "parse_request",
             "input": query,
@@ -175,7 +175,7 @@ def run_pipeline(client, query, request_id):
     timeout = 30
 
     while time.time() - start < timeout:
-        recv_result = client.recv(max_messages=10)
+        recv_result = client.recv_messages(max_messages=10)
 
         if recv_result.get('success') and recv_result.get('count', 0) > 0:
             for msg in recv_result.get('messages', []):
@@ -288,7 +288,7 @@ def main():
     for name in agents:
         try:
             # Send shutdown signal
-            client.send(message={"type": "shutdown"}, to_name=name)
+            client.send_message(message={"type": "shutdown"}, to_name=name)
         except:
             pass
 

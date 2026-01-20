@@ -108,6 +108,13 @@ void Kernel::shutdown() {
     running_ = false;
 }
 
+std::string Kernel::get_llm_model() const {
+    if (llm_client_) {
+        return llm_client_->config().model;
+    }
+    return config_.llm_model;
+}
+
 void Kernel::on_server_event(int fd, uint32_t events) {
     if (events & EPOLLIN) {
         // Accept new connections

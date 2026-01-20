@@ -1,14 +1,79 @@
 # AgentOS Development Status
 
-**Last Updated:** 2026-01-18
+**Last Updated:** 2026-01-20
 
 ---
 
-## Current Phase: Phase 5 - Universal Agent Runtime **IN PROGRESS**
+## Current Phase: Phase 6 - Benchmark Framework **NEXT**
+
+**Goal:** Standardized task suites, metrics collection, and comparison tools for agent evaluation.
+
+---
+
+## Recent Additions (2026-01-20)
+
+### Web Dashboard **NEW**
+
+Real-time browser-based monitoring dashboard for AgentOS agents.
+
+**Features:**
+- Live agent monitoring via WebSocket (updates every second)
+- Spawn and kill agents directly from the UI
+- Process hierarchy visualization
+- System statistics (running, stopped, failed counts)
+- Dark terminal-inspired theme
+- Auto-reconnect when kernel restarts
+
+**Architecture:**
+```
+Browser (localhost:8000) → WebSocket (ws://localhost:8765) → ws_proxy.py → Unix Socket → Kernel
+```
+
+**Quick Start:**
+```bash
+# Terminal 1: Kernel
+./build/agentos_kernel
+
+# Terminal 2: WebSocket proxy
+python3 agents/dashboard/ws_proxy.py
+
+# Terminal 3: HTTP server
+cd agents/dashboard && python3 -m http.server 8000
+
+# Open: http://localhost:8000
+```
+
+### Agentic Loop Framework **NEW**
+
+LLM-powered autonomous agent framework (`agents/python_sdk/agentic.py`) - similar to Claude Code's approach.
+
+**Features:**
+- Iterative task execution with LLM reasoning
+- Built-in tools: `exec`, `read_file`, `write_file`, `done`
+- Conversation history management
+- Extensible tool system
+- Configurable max iterations
+
+**Usage:**
+```python
+from agentic import run_task, AgenticLoop
+
+# Quick usage
+result = run_task("Create a hello.py and run it")
+
+# With more control
+with AgentOSClient() as client:
+    loop = AgenticLoop(client, max_iterations=20)
+    result = loop.run("List all Python files")
+```
+
+---
+
+## Phase 5: Universal Agent Runtime **COMPLETE**
 
 **Goal:** Make AgentOS the universal runtime layer that ANY agent/workflow can plug into - with controlled access to your PC.
 
-**Status (2026-01-18):** Core implementation complete:
+**Status (2026-01-20):** All core implementation complete:
 - 5.1 Permission System ✓
 - 5.2 Host Access Syscalls (SYS_HTTP) ✓
 - 5.3 MCP Server for Claude Desktop ✓
@@ -449,7 +514,13 @@ AGENTOS/
 │       └── logger.cpp
 ├── agents/
 │   ├── python_sdk/
-│   │   └── agentos.py            # Client SDK (multimodal think())
+│   │   ├── agentos.py            # Client SDK (multimodal think())
+│   │   └── agentic.py            # [NEW] Agentic loop framework
+│   ├── dashboard/                 # [NEW] Web monitoring dashboard
+│   │   ├── index.html            # Single-page dashboard app
+│   │   ├── ws_proxy.py           # WebSocket proxy bridge
+│   │   ├── README.md             # Dashboard documentation
+│   │   └── QUICKSTART.md         # Quick start guide
 │   ├── llm_service/
 │   │   ├── llm_service.py        # LLM subprocess (google-genai)
 │   │   └── requirements.txt      # Python dependencies
@@ -495,8 +566,10 @@ AGENTOS/
 | Phase 2 | Sandboxing | **COMPLETE** |
 | Phase 3 | LLM Integration (Gemini) | **COMPLETE** |
 | Phase 4 | OS-Level Demonstrations | **COMPLETE** |
-| Phase 5 | Universal Agent Runtime | **IN PROGRESS** |
-| Phase 6 | Production Hardening | **NEXT** |
+| Phase 5 | Universal Agent Runtime | **COMPLETE** |
+| Phase 6 | Benchmark Framework | **NEXT** |
+| Phase 7 | World Simulation | **FUTURE** |
+| Phase 8 | Agent Gymnasium | **VISION** |
 
 ---
 
@@ -882,12 +955,50 @@ Two compelling narratives for AgentOS:
 
 ## Notes
 
-- All tests passing as of 2026-01-17
+- All tests passing as of 2026-01-20
 - Sandbox fallback works correctly without root
 - Python SDK fully updated with spawn/kill/list/think (multimodal support)
 - **LLM client uses Python subprocess (google-genai SDK)** instead of C++ HTTP
 - Automatic .env file loading in both C++ and Python
 - Multimodal support: text + images
 - Extended think() options: system_instruction, thinking_level, temperature
-- **Current examples are SDK onboarding / smoke tests** - not the flagship demos
-- **Phase 4 goal: adversarial examples that only AgentOS can handle cleanly**
+- **Phase 5 complete:** Permission system, host access syscalls, MCP server, and framework adapters all working
+- **Web Dashboard:** Real-time browser-based monitoring with WebSocket proxy
+- **Agentic Loop:** Claude Code-style autonomous agent framework for iterative task execution
+- **Next focus:** Benchmark framework for standardized agent evaluation
+
+---
+
+## Future Directions
+
+### Phase 6: Benchmark Framework
+
+**Goal:** Standardized task suites, metrics collection, and comparison tools for agent evaluation.
+
+**Why AgentOS for benchmarks:**
+- **Identical conditions** - Same resource limits, same sandboxing for all agents
+- **No interference** - Agents can't affect each other's performance
+- **Reproducible** - Controlled environment ensures consistent results
+- **Real metrics** - Kernel-level resource tracking (not just token counts)
+- **Failure handling** - Measure how agents recover from crashes/timeouts
+
+### Phase 7: World Simulation
+
+**Goal:** Filesystem virtualization, network mocking, event injection for agent testing.
+
+**Capabilities:**
+- Mount custom directory trees, inject files, track modifications
+- Mock APIs, inject latency/failures, restrict connectivity
+- Accelerate time for long-running tests, schedule events
+- Trigger failures, load spikes, data corruption at specific times
+- Save/restore world state for reproducible testing
+
+### Phase 8: Agent Gymnasium
+
+**Vision:** Library of worlds for training and evaluating autonomous agents.
+
+**Use cases:**
+- Test SRE agents against simulated outages
+- Evaluate coding agents in realistic project environments
+- Benchmark multi-agent collaboration in shared worlds
+- Train agents on edge cases without risking production systems

@@ -49,9 +49,11 @@ Extend the AgentOS kernel to support distributed agents, inter-agent communicati
 
 ---
 
-## Phase 1: Inter-Agent Communication (IPC)
+## Phase 1: Inter-Agent Communication (IPC) ✅ COMPLETE
 
 **Goal:** Enable agents to communicate with each other through the kernel.
+
+**Status:** Implemented in kernel. See `SYS_SEND` (0x20), `SYS_RECV` (0x21), `SYS_BROADCAST` (0x22), `SYS_SUBSCRIBE` (0x23) in protocol.hpp.
 
 ### New Syscalls
 
@@ -169,9 +171,11 @@ std::unordered_map<std::string, StoredValue> state_store_;
 
 ---
 
-## Phase 3: Permission System
+## Phase 3: Permission System ✅ COMPLETE
 
 **Goal:** Kernel enforces what each agent is allowed to do.
+
+**Status:** Fully implemented in `src/kernel/permissions.hpp/cpp`. Includes path validation, command filtering, domain whitelist, LLM quotas.
 
 ### Permission Model
 
@@ -229,9 +233,11 @@ enum class PermissionLevel {
 
 ---
 
-## Phase 4: Network Syscalls
+## Phase 4: Network Syscalls ✅ COMPLETE
 
 **Goal:** Agents can make HTTP requests through the kernel.
+
+**Status:** Implemented `SYS_HTTP` (0x50) with domain whitelist enforcement. Uses curl subprocess.
 
 ### New Syscalls
 
@@ -494,18 +500,18 @@ When quota exceeded:
 
 ## Implementation Order
 
-| Phase | Priority | Effort | Dependencies |
-|-------|----------|--------|--------------|
-| Phase 1: IPC | High | Medium | None |
-| Phase 2: State Store | High | Low | None |
-| Phase 3: Permissions | Medium | Medium | None |
-| Phase 4: Network | Medium | Low | None |
-| Phase 5: Events | Medium | Medium | Phase 1 |
-| Phase 6: Remote | High | High | Phase 1, 3 |
-| Phase 7: Orchestration | Low | Medium | Phase 1, 2, 5 |
-| Phase 8: Quotas | Low | Medium | Phase 3 |
+| Phase | Priority | Effort | Status |
+|-------|----------|--------|--------|
+| Phase 1: IPC | High | Medium | ✅ COMPLETE |
+| Phase 2: State Store | High | Low | Pending |
+| Phase 3: Permissions | Medium | Medium | ✅ COMPLETE |
+| Phase 4: Network | Medium | Low | ✅ COMPLETE |
+| Phase 5: Events | Medium | Medium | Pending |
+| Phase 6: Remote | High | High | Pending |
+| Phase 7: Orchestration | Low | Medium | Pending |
+| Phase 8: Quotas | Low | Medium | Pending |
 
-**Recommended order:** 1 → 2 → 6 → 3 → 4 → 5 → 7 → 8
+**Next priority:** Phase 2 (State Store) or Phase 6 (Remote Connectivity)
 
 ---
 
@@ -541,9 +547,16 @@ agents/
 
 ## Next Steps
 
-1. **Pick first phase to implement** (recommend Phase 1: IPC or Phase 6: Remote)
-2. **Set up relay server** if going remote-first
-3. **Design token/auth system** for remote agents
-4. **Create test agents** that exercise new capabilities
+**Completed:**
+- ✅ Phase 1: IPC (SYS_SEND, SYS_RECV, SYS_BROADCAST, SYS_SUBSCRIBE)
+- ✅ Phase 3: Permission System (path validation, command filtering, domain whitelist)
+- ✅ Phase 4: Network Syscalls (SYS_HTTP with domain restrictions)
 
-Which phase do you want to start with?
+**Up Next:**
+1. **Phase 2: State Store** - Shared key-value storage for agent coordination
+2. **Phase 6: Remote Connectivity** - Cloud agents connecting to local kernel via relay
+3. **Phase 5: Events** - Pub/sub event system for agent notifications
+
+**Also Implemented (not in original plan):**
+- Web Dashboard - Real-time browser monitoring UI
+- Agentic Loop Framework - Claude Code-style autonomous agent execution

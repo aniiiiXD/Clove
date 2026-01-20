@@ -163,6 +163,8 @@ void SocketServer::process_messages(ClientConnection& client) {
 
         // Call handler and queue response
         if (handler_) {
+            // Override message agent_id with actual client ID (client may send 0 initially)
+            msg->agent_id = client.agent_id;
             Message response = handler_(*msg);
             response.agent_id = client.agent_id;
 

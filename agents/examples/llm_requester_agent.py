@@ -93,7 +93,7 @@ def main():
     }
 
     # Try to send to orchestrator
-    send_result = client.send(message=summary, to_name="orchestrator")
+    send_result = client.send_message(message=summary, to_name="orchestrator")
     if send_result.get('success'):
         print(f"[{agent_name}] Results sent to orchestrator")
 

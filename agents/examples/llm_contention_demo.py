@@ -147,7 +147,7 @@ def wait_for_completion(client, agents, timeout):
             break
 
         # Check for messages from agents
-        recv_result = client.recv(max_messages=10)
+        recv_result = client.recv_messages(max_messages=10)
         if recv_result.get('success') and recv_result.get('count', 0) > 0:
             for msg in recv_result.get('messages', []):
                 agent_name = msg.get('from_name', 'unknown')

@@ -54,7 +54,7 @@ def run_receiver():
         try:
             while True:
                 # Poll for messages
-                result = client.recv(max_messages=10)
+                result = client.recv_messages(max_messages=10)
 
                 if result.get("success") and result.get("count", 0) > 0:
                     for msg in result["messages"]:
@@ -107,7 +107,7 @@ def run_sender():
 
                 if cmd.startswith("send "):
                     message_text = cmd[5:].strip()
-                    result = client.send(
+                    result = client.send_message(
                         message={"type": "text", "content": message_text},
                         to_name="receiver"
                     )
