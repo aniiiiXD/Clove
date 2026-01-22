@@ -86,7 +86,19 @@ sudo ./build/clove_kernel
 python3 agents/examples/hello_agent.py
 ```
 
-### Start the Dashboard
+### Start the Metrics TUI
+
+```bash
+# Terminal 1: Kernel (already running)
+
+# Terminal 2: Launch TUI
+python3 agents/dashboard/metrics_tui.py
+```
+
+The TUI shows live system metrics (CPU, memory, disk, network) and active agents.
+Press `q` to quit, `r` to force refresh.
+
+### Start the Web Dashboard
 
 ```bash
 # Terminal 1: Kernel (already running)
@@ -244,9 +256,30 @@ $ clove status
 └───────────────────────┴────────────┴─────────────┴─────────────┘
 ```
 
+## Multi-Agent Benchmarks
+
+Compare Clove against other frameworks like LangGraph:
+
+```bash
+# Install dependencies
+pip install langgraph langchain-google-genai python-dotenv
+
+# Run the benchmark
+cd worlds/examples/research_team
+python3 benchmark.py --iterations 3
+```
+
+This benchmark runs a 3-agent research team (Coordinator, Researcher, Writer) in three configurations:
+- **LangGraph**: StateGraph pattern, single process
+- **Clove Single-Process**: Kernel-mediated LLM calls
+- **Clove Multi-Process**: Real process isolation with IPC messaging
+
+See [worlds/examples/research_team/README.md](../worlds/examples/research_team/README.md) for details.
+
 ## Next Steps
 
 - [Syscall Reference](syscalls.md) - All available syscalls
 - [Architecture](architecture.md) - How Clove works
 - [CLI Reference](../cli/README.md) - Full CLI documentation
 - [Examples](../agents/examples/README.md) - Demo agents
+- [Multi-Agent Benchmark](../worlds/examples/research_team/README.md) - Clove vs LangGraph comparison

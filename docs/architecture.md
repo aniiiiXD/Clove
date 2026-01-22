@@ -172,6 +172,80 @@ Agent A ──SYS_SEND──► Kernel Mailbox[B] ──SYS_RECV──► Agent 
 - Messages are JSON payloads
 - Supports: point-to-point, broadcast, name-based addressing
 
+## Multi-Agent Patterns
+
+Clove supports two patterns for multi-agent systems:
+
+### Single-Process (Simulated Agents)
+
+All "agents" are function calls in one process. Simple but no fault isolation.
+
+```
+┌──────────────────────────────────────┐
+│          Single Python Process       │
+│  ┌──────────┐  ┌──────────┐        │
+│  │Coordinator│──│Researcher│        │
+│  └──────────┘  └──────────┘        │
+│       │             │              │
+│       └──────┬──────┘              │
+│              ▼                      │
+│  ┌──────────────────────────────┐  │
+│  │    client.think() calls      │  │
+│  └──────────────────────────────┘  │
+└──────────────────────────────────────┘
+              │
+              ▼
+      Clove Kernel
+```
+
+### Multi-Process (Real Agents)
+
+Each agent is a spawned process with IPC messaging. Full fault isolation.
+
+```
+┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+│ Coordinator  │  │  Researcher  │  │    Writer    │
+│   Process    │  │   Process    │  │   Process    │
+└──────┬───────┘  └──────┬───────┘  └──────┬───────┘
+       │                 │                 │
+       │    IPC Messages (via kernel)      │
+       └─────────────────┼─────────────────┘
+                         │
+                         ▼
+                  ┌──────────────┐
+                  │ Clove Kernel │
+                  │  - Mailboxes │
+                  │  - LLM calls │
+                  │  - Resources │
+                  └──────────────┘
+```
+
+**Key Differences:**
+
+| Aspect | Single-Process | Multi-Process |
+|--------|---------------|---------------|
+| Fault Isolation | None | Full (process boundaries) |
+| Resource Limits | Shared | Per-agent (cgroups) |
+| Communication | Function calls | IPC messages |
+| Complexity | Simple | More setup required |
+| Use Case | Prototyping | Production |
+
+**Example: Multi-Process Agent**
+
+```python
+# Coordinator spawns agents
+client.spawn(name="researcher", script="researcher.py", sandboxed=True)
+client.spawn(name="writer", script="writer.py", sandboxed=True)
+
+# Send task to researcher
+client.send_message({"task": "research AI"}, to_name="researcher")
+
+# Wait for results
+result = client.recv_messages()
+```
+
+See [worlds/examples/research_team/](../worlds/examples/research_team/) for a complete comparison.
+
 ## Relay Server (`relay/`)
 
 The relay server enables remote connectivity and fleet management.

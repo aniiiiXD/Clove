@@ -1,0 +1,30 @@
+{
+  "timestamp": "20260122_060846",
+  "results": [
+    {
+      "error": "All iterations failed"
+    },
+    {
+      "framework": "clove",
+      "iterations": 1,
+      "errors": 0,
+      "mean_ms": 1380.751371383667,
+      "min_ms": 1380.751371383667,
+      "max_ms": 1380.751371383667,
+      "avg_workflow_iterations": 1.0,
+      "avg_notes": 0.0,
+      "avg_report_length": 0.0,
+      "raw_results": [
+        {
+          "elapsed_ms": 1380.751371383667,
+          "iterations": 1,
+          "notes_count": 0,
+          "report_length": 0
+        }
+      ]
+    },
+    {
+      "error": "All iterations failed"
+    }
+  ]
+}

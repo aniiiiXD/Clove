@@ -1,0 +1,26 @@
+{
+  "timestamp": "20260122_063019",
+  "results": [
+    {
+      "framework": "clove_multiprocess",
+      "iterations": 1,
+      "errors": 0,
+      "mean_ms": 5041.445732116699,
+      "min_ms": 5041.445732116699,
+      "max_ms": 5041.445732116699,
+      "avg_workflow_iterations": 5.0,
+      "avg_notes": 0.0,
+      "avg_report_length": 0.0,
+      "avg_agents": 2.0,
+      "raw_results": [
+        {
+          "elapsed_ms": 5041.445732116699,
+          "iterations": 5,
+          "notes_count": 0,
+          "report_length": 0,
+          "agents_spawned": 2
+        }
+      ]
+    }
+  ]
+}

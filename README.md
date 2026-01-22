@@ -84,6 +84,40 @@ python demos/crash_isolation_demo.py
 
 This demo spawns 3 agents, crashes one, and shows the others continue unaffected.
 
+## Metrics TUI
+
+Real-time terminal dashboard for monitoring Clove kernel.
+
+```bash
+# Make sure kernel is running
+./build/clove_kernel &
+
+# Launch TUI
+python3 agents/dashboard/metrics_tui.py
+```
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│ ● CONNECTED        ◆ CLOVE Metrics Dashboard          ⏱ 14:32:05 │
+├────────────────────────────────┬─────────────────────────────────┤
+│ System Metrics                 │ Agents (3)                      │
+│                                │                                 │
+│ CPU     ████████░░░░  42.3%    │ ID  Name         Status    CPU  │
+│ Load    1.24 / 0.98 / 0.76     │ 1   coordinator  ● running 2.1% │
+│ Memory  ██████░░░░ 3.2GB/8GB   │ 2   researcher   ● running 5.3% │
+│ Disk    R: 124MB | W: 56MB     │ 3   writer       ● running 1.2% │
+│ Network ↓ 1.2GB | ↑ 340MB      │                                 │
+├────────────────────────────────┴─────────────────────────────────┤
+│ Updated: 14:32:05     [q] Quit  [r] Refresh                      │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+**Features:**
+- Live CPU, memory, disk, and network metrics
+- Agent list with status and resource usage
+- Auto-refresh every 2 seconds
+- Keyboard controls (q=quit, r=refresh)
+
 ## Web Dashboard
 
 Real-time browser-based monitoring for Clove agents.
@@ -431,6 +465,32 @@ Clove adapters for existing frameworks - all operations go through the permissio
 - **AutoGen** - `CloveAssistant` and `CloveUserProxy` for multi-agent chat
 - **MCP** - Claude Desktop integration via Model Context Protocol
 
+## Multi-Agent Benchmark: Clove vs LangGraph
+
+Compare Clove's multi-agent architecture against LangGraph with a real-world example.
+
+```bash
+# Run the benchmark
+cd worlds/examples/research_team
+python3 benchmark.py --iterations 3
+```
+
+**The Example:** A research team with 3 agents (Coordinator, Researcher, Writer) that collaborate to produce a report on a given topic.
+
+| Implementation | Description |
+|----------------|-------------|
+| `langgraph_version.py` | LangGraph StateGraph - all agents in one process |
+| `clove_version.py` | Clove single-process - kernel-mediated LLM calls |
+| `clove_multiprocess.py` | Clove multi-process - real process isolation with IPC |
+
+**Key Advantages of Clove Multi-Process:**
+- **Crash Isolation**: If one agent crashes, others continue unaffected
+- **Resource Limits**: Each agent can have memory/CPU caps (cgroups)
+- **Security**: Agents can be sandboxed with Linux namespaces
+- **Scalability**: Agents can run on different machines via relay
+
+See [worlds/examples/research_team/README.md](worlds/examples/research_team/README.md) for full details.
+
 ## Syscall Reference
 
 | Opcode | Name | Description |
@@ -484,6 +544,10 @@ Clove/
 │   ├── terraform/        # AWS and GCP Terraform modules
 │   └── systemd/          # Systemd service files
 ├── demos/                # Demo scripts showcasing Clove features
+├── worlds/               # World simulations and examples
+│   └── examples/         # Multi-agent examples and benchmarks
+│       └── research_team/  # Clove vs LangGraph comparison
+├── benchmarks/           # Benchmark runners and configurations
 ├── test_suite/           # Test suite for all components
 ├── docs/                 # Documentation
 ├── build/
@@ -502,6 +566,7 @@ Clove/
 | [CLI Reference](cli/README.md) | Fleet management CLI |
 | [Python SDK](agents/python_sdk/README.md) | SDK usage and API |
 | [Examples](agents/examples/README.md) | Demo agents and use cases |
+| [Multi-Agent Benchmark](worlds/examples/research_team/README.md) | Clove vs LangGraph comparison |
 
 ## Requirements
 

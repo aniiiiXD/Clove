@@ -1,0 +1,24 @@
+{
+  "timestamp": "20260122_061143",
+  "results": [
+    {
+      "framework": "clove",
+      "iterations": 1,
+      "errors": 0,
+      "mean_ms": 467.0712947845459,
+      "min_ms": 467.0712947845459,
+      "max_ms": 467.0712947845459,
+      "avg_workflow_iterations": 1.0,
+      "avg_notes": 0.0,
+      "avg_report_length": 0.0,
+      "raw_results": [
+        {
+          "elapsed_ms": 467.0712947845459,
+          "iterations": 1,
+          "notes_count": 0,
+          "report_length": 0
+        }
+      ]
+    }
+  ]
+}
