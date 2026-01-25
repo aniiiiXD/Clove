@@ -64,6 +64,7 @@ enum class AgentState {
     CREATED,
     STARTING,
     RUNNING,
+    PAUSED,
     STOPPING,
     STOPPED,
     FAILED
@@ -114,6 +115,8 @@ public:
     bool start();
     bool stop(int timeout_ms = 5000);
     bool restart();
+    bool pause();
+    bool resume();
 
     // Status
     AgentState state() const { return state_; }
@@ -182,6 +185,12 @@ public:
     // Stop and remove agent
     bool kill_agent(const std::string& name);
     bool kill_agent(uint32_t id);
+
+    // Pause and resume agent
+    bool pause_agent(const std::string& name);
+    bool pause_agent(uint32_t id);
+    bool resume_agent(const std::string& name);
+    bool resume_agent(uint32_t id);
 
     // List agents
     std::vector<std::shared_ptr<AgentProcess>> list_agents() const;

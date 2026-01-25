@@ -42,6 +42,7 @@ struct SandboxConfig {
 enum class SandboxState {
     CREATED,
     RUNNING,
+    PAUSED,
     STOPPED,
     FAILED
 };
@@ -66,6 +67,8 @@ public:
     bool start(const std::string& command, const std::vector<std::string>& args = {});
     bool stop(int timeout_ms = 5000);
     bool destroy();
+    bool pause();
+    bool resume();
 
     // Status
     SandboxState state() const { return state_; }

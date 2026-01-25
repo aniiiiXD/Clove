@@ -16,7 +16,7 @@ import time
 # Add SDK to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'agents', 'python_sdk'))
 
-from agentos import CloveClient
+from clove_sdk import CloveClient
 
 CRASH_SCRIPT = os.path.join(os.path.dirname(__file__), 'crash_agent.py')
 SUCCESS_SCRIPT = os.path.join(os.path.dirname(__file__), 'success_agent.py')

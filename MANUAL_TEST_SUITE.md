@@ -53,8 +53,11 @@ cp .env.example .env
 | 16 | Dashboard | Web UI Monitoring | 2 min |
 | 17 | Multi-Agent | Pipeline Processing | 4 min |
 | 18 | Autonomous | Agentic Loop Framework | 3 min |
+| 19 | Agent Control | Pause/Resume | 2 min |
+| 20 | Audit | Audit Logging | 2 min |
+| 21 | Replay | Execution Recording & Replay | 3 min |
 
-**Total Estimated Time**: ~40 minutes
+**Total Estimated Time**: ~47 minutes
 
 ---
 
@@ -65,7 +68,7 @@ cp .env.example .env
 **Test Script**: `test_scripts/01_basic_llm.py`
 ```python
 #!/usr/bin/env python3
-from clove import CloveClient
+from clove_sdk import CloveClient
 
 def main():
     with CloveClient() as client:
@@ -111,7 +114,7 @@ python test_scripts/01_basic_llm.py
 **Test Script**: `test_scripts/02_multimodal.py`
 ```python
 #!/usr/bin/env python3
-from clove import CloveClient
+from clove_sdk import CloveClient
 import base64
 
 def main():
@@ -159,7 +162,7 @@ python test_scripts/02_multimodal.py
 **Test Script**: `test_scripts/03_advanced_llm.py`
 ```python
 #!/usr/bin/env python3
-from clove import CloveClient
+from clove_sdk import CloveClient
 
 def main():
     with CloveClient() as client:
@@ -223,7 +226,7 @@ python test_scripts/03_advanced_llm.py
 **Test Script**: `test_scripts/04_filesystem.py`
 ```python
 #!/usr/bin/env python3
-from clove import CloveClient
+from clove_sdk import CloveClient
 import os
 
 def main():
@@ -282,7 +285,7 @@ python test_scripts/04_filesystem.py
 **Test Script**: `test_scripts/05_execution.py`
 ```python
 #!/usr/bin/env python3
-from clove import CloveClient
+from clove_sdk import CloveClient
 
 def main():
     with CloveClient() as client:
@@ -339,13 +342,13 @@ python test_scripts/05_execution.py
 **Test Script**: `test_scripts/06_agent_management.py`
 ```python
 #!/usr/bin/env python3
-from clove import CloveClient
+from clove_sdk import CloveClient
 import time
 
 # Create a simple worker agent
 WORKER_SCRIPT = """
 import time
-from clove import CloveClient
+from clove_sdk import CloveClient
 
 with CloveClient() as client:
     print("Worker agent started!")
@@ -429,14 +432,14 @@ python test_scripts/06_agent_management.py
 **Main Script**:
 ```python
 #!/usr/bin/env python3
-from clove import CloveClient
+from clove_sdk import CloveClient
 import time
 import json
 
 # Worker agent that processes messages
 WORKER_SCRIPT = """
 import time
-from clove import CloveClient
+from clove_sdk import CloveClient
 
 with CloveClient() as client:
     # Register with a name
@@ -533,13 +536,13 @@ python test_scripts/07_ipc_messaging.py
 
 ```python
 #!/usr/bin/env python3
-from clove import CloveClient
+from clove_sdk import CloveClient
 import time
 
 # Listener agent
 LISTENER_SCRIPT = """
 import time
-from clove import CloveClient
+from clove_sdk import CloveClient
 import sys
 
 name = sys.argv[1]
@@ -621,7 +624,7 @@ python test_scripts/08_broadcast.py
 
 ```python
 #!/usr/bin/env python3
-from clove import CloveClient
+from clove_sdk import CloveClient
 import time
 
 def main():
@@ -701,7 +704,7 @@ python test_scripts/09_state_store.py
 
 ```python
 #!/usr/bin/env python3
-from clove import CloveClient
+from clove_sdk import CloveClient
 import json
 
 def main():
@@ -780,7 +783,7 @@ python test_scripts/10_http_requests.py
 **Main script**:
 ```python
 #!/usr/bin/env python3
-from clove import CloveClient
+from clove_sdk import CloveClient
 import time
 
 def main():
@@ -789,7 +792,7 @@ def main():
 
         # Create subscriber script
         subscriber_code = """import time
-from clove import CloveClient
+from clove_sdk import CloveClient
 import sys
 
 event_type = sys.argv[1]
@@ -887,13 +890,13 @@ python test_scripts/11_events_pubsub.py
 
 ```python
 #!/usr/bin/env python3
-from clove import CloveClient
+from clove_sdk import CloveClient
 import time
 
 # Network member agent
 MEMBER_SCRIPT = """
 import time
-from clove import CloveClient
+from clove_sdk import CloveClient
 import sys
 
 network_name = sys.argv[1]
@@ -1012,7 +1015,7 @@ python test_scripts/12_networks.py
 
 ```python
 #!/usr/bin/env python3
-from clove import CloveClient
+from clove_sdk import CloveClient
 import time
 
 # Memory hog agent
@@ -1174,12 +1177,12 @@ Spawning agents:
 
 ```python
 #!/usr/bin/env python3
-from clove import CloveClient
+from clove_sdk import CloveClient
 import time
 
 # Restricted agent
 RESTRICTED = """
-from clove import CloveClient
+from clove_sdk import CloveClient
 import sys
 
 with CloveClient() as client:
@@ -1354,7 +1357,7 @@ python agents/examples/pipeline_demo.py
 
 ```python
 #!/usr/bin/env python3
-from clove import CloveClient
+from clove_sdk import CloveClient
 from agentic import AgenticLoop, run_task
 
 def main():
@@ -1408,6 +1411,362 @@ python test_scripts/18_agentic_loop.py
 
 ---
 
+## Test 19: Pause/Resume
+
+**Capability**: PAUSE and RESUME syscalls for agent control
+
+**Test Script**: `test_scripts/19_pause_resume.py`
+```python
+#!/usr/bin/env python3
+from clove_sdk import CloveClient
+import time
+
+# Worker script that increments a counter
+WORKER_SCRIPT = """
+import time
+from clove_sdk import CloveClient
+
+with CloveClient() as client:
+    client.register_name("pause-test-worker")
+    count = 0
+    while count < 60:
+        count += 1
+        client.store("pause_test_counter", count, scope="global")
+        time.sleep(0.5)
+"""
+
+def main():
+    with CloveClient() as client:
+        print("=== Test 19: Pause/Resume ===\n")
+
+        # Create worker script
+        with open('/tmp/pause_test_worker.py', 'w') as f:
+            f.write(WORKER_SCRIPT)
+
+        # Spawn worker
+        print("--- Spawning worker agent ---")
+        spawn_result = client.spawn(
+            name="pause-test-worker",
+            script="/tmp/pause_test_worker.py",
+            sandboxed=False
+        )
+        agent_id = spawn_result.get('id')
+        print(f"Spawned agent ID: {agent_id}\n")
+
+        time.sleep(2)
+
+        # Verify agent is running (counter increasing)
+        print("--- Verify agent running ---")
+        counter1 = client.fetch("pause_test_counter").get('value', 0)
+        time.sleep(1)
+        counter2 = client.fetch("pause_test_counter").get('value', 0)
+        print(f"Counter: {counter1} -> {counter2} (should increase)\n")
+
+        # Pause the agent
+        print("--- Pausing agent ---")
+        result = client.pause(agent_id=agent_id)
+        print(f"Pause result: {result}\n")
+
+        # Verify agent is paused (counter not changing)
+        print("--- Verify agent paused ---")
+        counter3 = client.fetch("pause_test_counter").get('value', 0)
+        time.sleep(1.5)
+        counter4 = client.fetch("pause_test_counter").get('value', 0)
+        print(f"Counter: {counter3} -> {counter4} (should NOT change)\n")
+
+        # Check agent state
+        print("--- Check agent state ---")
+        agents = client.list_agents()
+        for agent in agents:
+            if agent.get('id') == agent_id:
+                print(f"Agent state: {agent.get('state')}\n")
+
+        # Resume the agent
+        print("--- Resuming agent ---")
+        result = client.resume(agent_id=agent_id)
+        print(f"Resume result: {result}\n")
+
+        # Verify agent resumed (counter increasing again)
+        print("--- Verify agent resumed ---")
+        time.sleep(1)
+        counter5 = client.fetch("pause_test_counter").get('value', 0)
+        time.sleep(1)
+        counter6 = client.fetch("pause_test_counter").get('value', 0)
+        print(f"Counter: {counter5} -> {counter6} (should increase again)\n")
+
+        # Cleanup
+        client.kill(agent_id=agent_id)
+        client.delete_key("pause_test_counter")
+
+        print("✅ Test 19 PASSED")
+
+if __name__ == "__main__":
+    main()
+```
+
+**Expected Output**:
+- Agent spawns and counter increments
+- After PAUSE, counter stops incrementing
+- Agent state shows "PAUSED"
+- After RESUME, counter resumes incrementing
+
+**Verification**:
+```bash
+python test_scripts/19_pause_resume.py
+```
+
+---
+
+## Test 20: Audit Logging
+
+**Capability**: GET_AUDIT_LOG and SET_AUDIT_CONFIG syscalls
+
+**Test Script**: `test_scripts/20_audit_logging.py`
+```python
+#!/usr/bin/env python3
+from clove_sdk import CloveClient
+import time
+
+def main():
+    with CloveClient() as client:
+        print("=== Test 20: Audit Logging ===\n")
+
+        # Get current audit log
+        print("--- Get audit log ---")
+        result = client.get_audit_log(limit=10)
+        entries = result.get("entries", [])
+        print(f"Retrieved {len(entries)} audit entries\n")
+
+        # Configure audit logging
+        print("--- Configure audit logging ---")
+        config_result = client.set_audit_config(
+            log_lifecycle=True,
+            log_security=True,
+            log_syscalls=False,
+            max_entries=1000
+        )
+        print(f"Config: {config_result.get('config', {})}\n")
+
+        # Generate audit events
+        print("--- Generate audit events ---")
+
+        # Create test agent script
+        with open('/tmp/audit_test.py', 'w') as f:
+            f.write("""
+import time
+from clove_sdk import CloveClient
+with CloveClient() as c:
+    c.register_name("audit-test")
+    time.sleep(2)
+""")
+
+        # Spawn and kill agent (generates AGENT_LIFECYCLE events)
+        spawn_result = client.spawn(
+            name="audit-test-agent",
+            script="/tmp/audit_test.py",
+            sandboxed=False
+        )
+        agent_id = spawn_result.get('id')
+        print(f"Spawned agent: {agent_id}")
+        time.sleep(1)
+        client.kill(agent_id=agent_id)
+        print(f"Killed agent: {agent_id}\n")
+
+        time.sleep(0.5)
+
+        # Filter by category
+        print("--- Filter by category (AGENT_LIFECYCLE) ---")
+        result = client.get_audit_log(category="AGENT_LIFECYCLE", limit=10)
+        entries = result.get("entries", [])
+        print(f"Found {len(entries)} AGENT_LIFECYCLE entries:")
+        for entry in entries[-5:]:
+            print(f"  [{entry.get('id')}] {entry.get('event_type')}: {entry.get('agent_name', entry.get('agent_id'))}")
+        print()
+
+        # Filter by agent ID
+        if agent_id:
+            print(f"--- Filter by agent ID ({agent_id}) ---")
+            result = client.get_audit_log(agent_id=agent_id, limit=10)
+            entries = result.get("entries", [])
+            print(f"Found {len(entries)} entries for agent {agent_id}\n")
+
+        # Test pagination
+        print("--- Test pagination with since_id ---")
+        result1 = client.get_audit_log(limit=5)
+        entries1 = result1.get("entries", [])
+        if entries1:
+            last_id = entries1[-1].get('id', 0)
+            result2 = client.get_audit_log(since_id=last_id, limit=5)
+            entries2 = result2.get("entries", [])
+            print(f"First batch: {len(entries1)} entries (last_id={last_id})")
+            print(f"Second batch (since {last_id}): {len(entries2)} entries\n")
+
+        print("✅ Test 20 PASSED")
+
+if __name__ == "__main__":
+    main()
+```
+
+**Expected Output**:
+- Audit log entries retrieved
+- Configuration updated successfully
+- AGENT_LIFECYCLE events captured for spawn/kill
+- Filtering by category and agent_id works
+- Pagination with since_id works
+
+**Audit Categories**:
+- `SECURITY` - Permission denied, blocked commands
+- `AGENT_LIFECYCLE` - Spawn, kill, pause, resume
+- `IPC` - Send, recv, broadcast
+- `STATE_STORE` - Store, fetch, delete
+- `RESOURCE` - Quota exceeded
+- `SYSCALL` - All syscalls (verbose)
+- `NETWORK` - HTTP requests
+- `WORLD` - World simulation events
+
+**Verification**:
+```bash
+python test_scripts/20_audit_logging.py
+```
+
+---
+
+## Test 21: Execution Recording & Replay
+
+**Capability**: RECORD_START, RECORD_STOP, RECORD_STATUS, REPLAY_START, REPLAY_STATUS syscalls
+
+**Test Script**: `test_scripts/21_execution_replay.py`
+```python
+#!/usr/bin/env python3
+from clove_sdk import CloveClient
+import time
+import json
+
+def main():
+    with CloveClient() as client:
+        print("=== Test 21: Execution Recording & Replay ===\n")
+
+        # Check initial status
+        print("--- Initial recording status ---")
+        status = client.get_recording_status()
+        print(f"State: {status.get('state', 'UNKNOWN')}")
+        print(f"Entry count: {status.get('entry_count', 0)}\n")
+
+        # Start recording
+        print("--- Start recording ---")
+        result = client.start_recording(
+            include_think=False,  # Exclude non-deterministic
+            include_http=False,
+            include_exec=False,
+            max_entries=10000
+        )
+        print(f"Recording started: {result}\n")
+
+        # Verify recording is active
+        status = client.get_recording_status()
+        print(f"Recording state: {status.get('state')}\n")
+
+        # Generate syscalls to record
+        print("--- Generate syscalls ---")
+        client.store("replay_test_1", {"value": 100}, scope="global")
+        client.store("replay_test_2", {"value": 200}, scope="global")
+        client.store("replay_test_3", {"value": 300}, scope="global")
+        client.fetch("replay_test_1")
+        client.fetch("replay_test_2")
+        client.delete_key("replay_test_3")
+        client.list_keys("replay_test")
+        print("Generated 7 syscalls\n")
+
+        time.sleep(0.5)
+
+        # Stop recording
+        print("--- Stop recording ---")
+        result = client.stop_recording()
+        print(f"Stopped: {result}")
+        print(f"Entry count: {result.get('entry_count', 0)}\n")
+
+        # Export recording
+        print("--- Export recording ---")
+        status = client.get_recording_status(export=True)
+        recording_data = status.get('recording', '')
+
+        if recording_data:
+            entries = json.loads(recording_data)
+            print(f"Exported {len(entries)} entries")
+            if entries:
+                sample = entries[0]
+                print(f"Sample entry: opcode_name={sample.get('opcode_name')}, agent_id={sample.get('agent_id')}\n")
+        else:
+            print("No recording data (syscalls may be filtered)\n")
+            recording_data = "[]"
+
+        # Start replay (if we have data)
+        print("--- Start replay ---")
+        if recording_data and recording_data != "[]":
+            result = client.start_replay(recording_data)
+            print(f"Replay started: {result}")
+            print(f"Total entries: {result.get('total_entries', 0)}\n")
+        else:
+            print("No recording to replay\n")
+
+        # Get replay status
+        print("--- Replay status ---")
+        status = client.get_replay_status()
+        print(f"State: {status.get('state', 'UNKNOWN')}")
+        print(f"Progress: {status.get('current_entry', 0)}/{status.get('total_entries', 0)}")
+        print(f"Replayed: {status.get('entries_replayed', 0)}")
+        print(f"Skipped: {status.get('entries_skipped', 0)}\n")
+
+        # Test recording with filters
+        print("--- Test recording with agent filter ---")
+        result = client.start_recording(
+            include_think=True,
+            include_http=True,
+            filter_agents=[999],  # Non-existent agent
+            max_entries=100
+        )
+        client.store("filter_test", "value")
+        status = client.get_recording_status()
+        print(f"Entries with filter: {status.get('entry_count', 0)} (should be 0)\n")
+        client.stop_recording()
+        client.delete_key("filter_test")
+
+        # Cleanup
+        client.delete_key("replay_test_1")
+        client.delete_key("replay_test_2")
+
+        print("✅ Test 21 PASSED")
+
+if __name__ == "__main__":
+    main()
+```
+
+**Expected Output**:
+- Recording starts successfully
+- Syscalls are captured (deterministic ones)
+- Recording stops with entry count
+- Recording can be exported as JSON
+- Replay can be started from exported data
+- Filter by agent ID works
+
+**Recording Configuration**:
+- `include_think`: Include LLM calls (non-deterministic, default: false)
+- `include_http`: Include HTTP calls (non-deterministic, default: false)
+- `include_exec`: Include exec calls (may be non-deterministic, default: false)
+- `filter_agents`: Only record specific agent IDs (empty = all)
+- `max_entries`: Maximum buffer size (default: 50000)
+
+**Recording States**: `IDLE`, `RECORDING`, `PAUSED`
+
+**Replay States**: `IDLE`, `RUNNING`, `PAUSED`, `COMPLETED`, `ERROR`
+
+**Verification**:
+```bash
+python test_scripts/21_execution_replay.py
+```
+
+---
+
 ## Comprehensive Integration Test
 
 **Run All Examples in Sequence**:
@@ -1437,6 +1796,9 @@ tests=(
     "13_resource_limits.py"
     "15_permissions.py"
     "18_agentic_loop.py"
+    "19_pause_resume.py"
+    "20_audit_logging.py"
+    "21_execution_replay.py"
 )
 
 passed=0
@@ -1550,7 +1912,8 @@ cat /sys/fs/cgroup/cgroup.controllers
 | Tests 6-10 | 11 min |
 | Tests 11-15 | 13 min |
 | Tests 16-18 | 9 min |
-| **Total** | **~50 minutes** |
+| Tests 19-21 | 7 min |
+| **Total** | **~57 minutes** |
 
 ---
 
@@ -1564,6 +1927,10 @@ cat /sys/fs/cgroup/cgroup.controllers
 ✅ **IPC messaging** works between agents
 ✅ **State store persists** data correctly
 ✅ **LLM integration** responds accurately
+✅ **Pause/Resume** stops and continues agent execution
+✅ **Audit logging** captures lifecycle and security events
+✅ **Execution recording** captures deterministic syscalls
+✅ **Replay mechanism** can replay recorded sessions
 
 ---
 

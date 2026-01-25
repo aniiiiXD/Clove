@@ -1,6 +1,6 @@
 # Clove Development Status
 
-**Last Updated:** 2026-01-22
+**Last Updated:** 2026-01-26
 
 ---
 
@@ -65,7 +65,7 @@ $ clove agent run my_agent.py --machine docker-dev-kernel-xxx
 - `deploy/terraform/aws/` - EC2 + networking Terraform module
 - `deploy/terraform/gcp/` - Compute Engine Terraform module
 - `deploy/systemd/` - Systemd service files
-- `agents/python_sdk/fleet_client.py` - Fleet management Python client
+- `agents/python_sdk/clove_sdk/fleet.py` - Fleet management Python client
 
 **Architecture:**
 ```
@@ -172,7 +172,7 @@ cd agents/dashboard && python3 -m http.server 8000
 
 ### Agentic Loop Framework **NEW**
 
-LLM-powered autonomous agent framework (`agents/python_sdk/agentic.py`) - similar to Claude Code's approach.
+LLM-powered autonomous agent framework (`agents/python_sdk/clove_sdk/agentic.py`) - similar to Claude Code's approach.
 
 **Features:**
 - Iterative task execution with LLM reasoning
@@ -644,10 +644,12 @@ CLOVE/
 │       └── logger.cpp
 ├── agents/
 │   ├── python_sdk/
-│   │   ├── clove.py            # Client SDK (multimodal think())
-│   │   ├── agentic.py            # Agentic loop framework
-│   │   ├── remote_client.py      # Remote agent client
-│   │   └── fleet_client.py       # [NEW] Fleet management client
+│   │   ├── pyproject.toml       # Package configuration
+│   │   └── clove_sdk/           # Python SDK package
+│   │       ├── client.py         # Main client
+│   │       ├── agentic.py        # Agentic loop framework
+│   │       ├── remote.py         # Remote agent client
+│   │       └── fleet.py          # Fleet management client
 │   ├── dashboard/                # Web monitoring dashboard
 │   │   ├── index.html            # Single-page dashboard app
 │   │   ├── ws_proxy.py           # WebSocket proxy bridge
@@ -795,7 +797,7 @@ python3 /home/anixd/Documents/CLOVE/agents/examples/spawn_test.py
 
 ### Python SDK Usage
 ```python
-from clove import CloveClient
+from clove_sdk import CloveClient
 
 with CloveClient() as client:
     # Spawn an agent
@@ -1256,3 +1258,36 @@ clove deploy aws --region us-east-1 --instance-type t3.small
 - **Reproducible** - Controlled environment ensures consistent results
 - **Real metrics** - Kernel-level resource tracking (not just token counts)
 - **Failure handling** - Measure how agents recover from crashes/timeouts
+
+---
+
+## Roadmap Summary
+
+| Phase | Feature | Status | Priority |
+|-------|---------|--------|----------|
+| **Done** | Core Kernel | **Complete** | - |
+| **Done** | IPC, State, Permissions | **Complete** | - |
+| **Done** | Events, Network, Tunnel | **Complete** | - |
+| **Done** | World Engine | **Complete** | - |
+| **Done** | CLI, Relay, Metrics | **Complete** | - |
+| **Done** | Hot Reload | **Complete** | - |
+| **Done** | Benchmark Suite | **Complete** | - |
+| **Next** | PAUSE/RESUME Syscalls | Not Started | High |
+| **Next** | AUDIT Logging | Not Started | High |
+| **Next** | REPLAY Mechanism | Not Started | Medium |
+| Later | Multi-Agent Orchestration | Not Started | Medium |
+| Later | Resource Quotas | Not Started | Medium |
+| Later | Multi-Node Cluster | Not Started | Medium |
+| Later | clove.yaml / clove up | Not Started | Medium |
+| Future | Clove Cloud (managed) | Not Started | Low |
+
+---
+
+## Success Metrics
+
+| Metric | Target | Timeframe |
+|--------|--------|-----------|
+| GitHub stars | 1,000 | 3 months |
+| Discord members | 500 | 3 months |
+| Production users | 10 | 6 months |
+| Agents running on Clove | 10,000 | 6 months |

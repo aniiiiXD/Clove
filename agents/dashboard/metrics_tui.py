@@ -35,7 +35,7 @@ from rich import box
 from rich.align import Align
 
 try:
-    from clove import CloveClient
+    from clove_sdk import CloveClient
 except ImportError:
     print("Error: Could not import CloveClient. Make sure the SDK is in path.")
     sys.exit(1)

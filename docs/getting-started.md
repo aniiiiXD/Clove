@@ -115,7 +115,7 @@ cd agents/dashboard && python3 -m http.server 8000
 ## Basic SDK Usage
 
 ```python
-from clove import CloveClient
+from clove_sdk import CloveClient
 
 with CloveClient() as client:
     # Echo test

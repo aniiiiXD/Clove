@@ -34,7 +34,7 @@ import time
 import sys
 sys.path.insert(0, 'agents/python_sdk')
 
-from clove import CloveClient
+from clove_sdk import CloveClient
 
 with CloveClient() as client:
     client.register_name("{name}")

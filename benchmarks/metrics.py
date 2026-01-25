@@ -166,7 +166,7 @@ class MetricsCollector:
             try:
                 import sys
                 sys.path.insert(0, 'agents/python_sdk')
-                from clove import CloveClient
+                from clove_sdk import CloveClient
                 self._clove_client = CloveClient()
                 self._clove_client.connect()
             except Exception as e:

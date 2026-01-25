@@ -125,6 +125,7 @@ AgentPermissions AgentPermissions::from_level(PermissionLevel level) {
             perms.can_http = true;
             perms.blocked_paths.clear();  // Clear blocks for unrestricted
             perms.blocked_commands.clear();
+            perms.allowed_domains.push_back("*");  // Allow all domains for unrestricted
             break;
 
         case PermissionLevel::STANDARD:
@@ -370,6 +371,11 @@ std::string PermissionChecker::extract_domain(const std::string& url) {
 }
 
 bool PermissionChecker::domain_matches(const std::string& domain, const std::string& pattern) {
+    // Universal wildcard - match all domains
+    if (pattern == "*") {
+        return true;
+    }
+
     // Exact match
     if (domain == pattern) {
         return true;

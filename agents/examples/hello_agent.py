@@ -11,7 +11,7 @@ import os
 # Add the SDK to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python_sdk'))
 
-from agentos import AgentOSClient, SyscallOp
+from clove_sdk import AgentOSClient, SyscallOp
 
 
 def main():

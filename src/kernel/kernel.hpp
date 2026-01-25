@@ -23,6 +23,8 @@
 #include "kernel/world_engine.hpp"
 #include "kernel/tunnel_client.hpp"
 #include "kernel/metrics/metrics.hpp"
+#include "kernel/audit_log.hpp"
+#include "kernel/execution_log.hpp"
 #include "ipc/socket_server.hpp"
 #include "runtime/agent_process.hpp"
 #include <nlohmann/json.hpp>
@@ -61,6 +63,8 @@ struct StoredValue {
 enum class KernelEventType {
     AGENT_SPAWNED,      // New agent started
     AGENT_EXITED,       // Agent terminated
+    AGENT_PAUSED,       // Agent paused
+    AGENT_RESUMED,      // Agent resumed
     AGENT_RESTARTING,   // Agent is being restarted (hot reload)
     AGENT_ESCALATED,    // Agent exceeded max restarts, escalating
     MESSAGE_RECEIVED,   // New IPC message arrived
@@ -75,6 +79,8 @@ inline std::string kernel_event_type_to_string(KernelEventType type) {
     switch (type) {
         case KernelEventType::AGENT_SPAWNED:    return "AGENT_SPAWNED";
         case KernelEventType::AGENT_EXITED:     return "AGENT_EXITED";
+        case KernelEventType::AGENT_PAUSED:     return "AGENT_PAUSED";
+        case KernelEventType::AGENT_RESUMED:    return "AGENT_RESUMED";
         case KernelEventType::AGENT_RESTARTING: return "AGENT_RESTARTING";
         case KernelEventType::AGENT_ESCALATED:  return "AGENT_ESCALATED";
         case KernelEventType::MESSAGE_RECEIVED: return "MESSAGE_RECEIVED";
@@ -90,6 +96,8 @@ inline std::string kernel_event_type_to_string(KernelEventType type) {
 inline KernelEventType kernel_event_type_from_string(const std::string& str) {
     if (str == "AGENT_SPAWNED")    return KernelEventType::AGENT_SPAWNED;
     if (str == "AGENT_EXITED")     return KernelEventType::AGENT_EXITED;
+    if (str == "AGENT_PAUSED")     return KernelEventType::AGENT_PAUSED;
+    if (str == "AGENT_RESUMED")    return KernelEventType::AGENT_RESUMED;
     if (str == "AGENT_RESTARTING") return KernelEventType::AGENT_RESTARTING;
     if (str == "AGENT_ESCALATED")  return KernelEventType::AGENT_ESCALATED;
     if (str == "MESSAGE_RECEIVED") return KernelEventType::MESSAGE_RECEIVED;
@@ -164,6 +172,8 @@ private:
     std::unique_ptr<WorldEngine> world_engine_;
     std::unique_ptr<TunnelClient> tunnel_client_;
     std::unique_ptr<clove::metrics::MetricsCollector> metrics_collector_;
+    std::unique_ptr<AuditLogger> audit_logger_;
+    std::unique_ptr<ExecutionLogger> execution_logger_;
 
     // IPC: Agent mailboxes (message queues per agent)
     std::unordered_map<uint32_t, std::queue<IPCMessage>> agent_mailboxes_;
@@ -209,6 +219,8 @@ private:
     ipc::Message handle_spawn(const ipc::Message& msg);
     ipc::Message handle_kill(const ipc::Message& msg);
     ipc::Message handle_list(const ipc::Message& msg);
+    ipc::Message handle_pause(const ipc::Message& msg);
+    ipc::Message handle_resume(const ipc::Message& msg);
     ipc::Message handle_exec(const ipc::Message& msg);
     ipc::Message handle_read(const ipc::Message& msg);
     ipc::Message handle_write(const ipc::Message& msg);
@@ -271,6 +283,17 @@ private:
     ipc::Message handle_metrics_agent(const ipc::Message& msg);
     ipc::Message handle_metrics_all_agents(const ipc::Message& msg);
     ipc::Message handle_metrics_cgroup(const ipc::Message& msg);
+
+    // Audit syscall handlers
+    ipc::Message handle_get_audit_log(const ipc::Message& msg);
+    ipc::Message handle_set_audit_config(const ipc::Message& msg);
+
+    // Replay syscall handlers
+    ipc::Message handle_record_start(const ipc::Message& msg);
+    ipc::Message handle_record_stop(const ipc::Message& msg);
+    ipc::Message handle_record_status(const ipc::Message& msg);
+    ipc::Message handle_replay_start(const ipc::Message& msg);
+    ipc::Message handle_replay_status(const ipc::Message& msg);
 
     // Update client in reactor (for write events)
     void update_client_events(int fd);

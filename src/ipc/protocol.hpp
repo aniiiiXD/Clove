@@ -30,6 +30,8 @@ enum class SyscallOp : uint8_t {
     SYS_SPAWN  = 0x10,  // Spawn a sandboxed agent
     SYS_KILL   = 0x11,  // Kill an agent
     SYS_LIST   = 0x12,  // List running agents
+    SYS_PAUSE  = 0x14,  // Pause an agent (SIGSTOP)
+    SYS_RESUME = 0x15,  // Resume a paused agent (SIGCONT)
     // IPC - Inter-Agent Communication
     SYS_SEND      = 0x20,  // Send message to another agent
     SYS_RECV      = 0x21,  // Receive pending messages
@@ -71,6 +73,15 @@ enum class SyscallOp : uint8_t {
     SYS_METRICS_AGENT     = 0xC1,  // Get metrics for specific agent
     SYS_METRICS_ALL_AGENTS = 0xC2, // Get metrics for all agents
     SYS_METRICS_CGROUP    = 0xC3,  // Get cgroup metrics for sandboxed agent
+    // Audit Logging
+    SYS_GET_AUDIT_LOG     = 0x76,  // Get audit log entries
+    SYS_SET_AUDIT_CONFIG  = 0x77,  // Configure audit logging
+    // Execution Recording & Replay
+    SYS_RECORD_START   = 0x70,  // Start recording execution
+    SYS_RECORD_STOP    = 0x71,  // Stop recording
+    SYS_RECORD_STATUS  = 0x72,  // Get recording status
+    SYS_REPLAY_START   = 0x73,  // Start replay
+    SYS_REPLAY_STATUS  = 0x74,  // Get replay status
     SYS_EXIT   = 0xFF   // Graceful shutdown
 };
 
@@ -198,6 +209,8 @@ inline const char* opcode_to_string(SyscallOp op) {
         case SyscallOp::SYS_SPAWN:     return "SPAWN";
         case SyscallOp::SYS_KILL:      return "KILL";
         case SyscallOp::SYS_LIST:      return "LIST";
+        case SyscallOp::SYS_PAUSE:     return "PAUSE";
+        case SyscallOp::SYS_RESUME:    return "RESUME";
         case SyscallOp::SYS_SEND:      return "SEND";
         case SyscallOp::SYS_RECV:      return "RECV";
         case SyscallOp::SYS_BROADCAST: return "BROADCAST";
@@ -231,6 +244,13 @@ inline const char* opcode_to_string(SyscallOp op) {
         case SyscallOp::SYS_METRICS_AGENT:     return "METRICS_AGENT";
         case SyscallOp::SYS_METRICS_ALL_AGENTS: return "METRICS_ALL_AGENTS";
         case SyscallOp::SYS_METRICS_CGROUP:    return "METRICS_CGROUP";
+        case SyscallOp::SYS_GET_AUDIT_LOG:     return "GET_AUDIT_LOG";
+        case SyscallOp::SYS_SET_AUDIT_CONFIG:  return "SET_AUDIT_CONFIG";
+        case SyscallOp::SYS_RECORD_START:   return "RECORD_START";
+        case SyscallOp::SYS_RECORD_STOP:    return "RECORD_STOP";
+        case SyscallOp::SYS_RECORD_STATUS:  return "RECORD_STATUS";
+        case SyscallOp::SYS_REPLAY_START:   return "REPLAY_START";
+        case SyscallOp::SYS_REPLAY_STATUS:  return "REPLAY_STATUS";
         case SyscallOp::SYS_EXIT:      return "EXIT";
         default: return "UNKNOWN";
     }

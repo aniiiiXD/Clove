@@ -23,12 +23,12 @@ from pathlib import Path
 
 # Add SDK to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "agents/python_sdk"))
-from clove import CloveClient
+from clove_sdk import CloveClient
 
 # Agent scripts
 STABLE_WORKER = '''
 import time
-from clove import CloveClient
+from clove_sdk import CloveClient
 
 with CloveClient() as client:
     client.register("{name}")
@@ -40,7 +40,7 @@ with CloveClient() as client:
 
 CRASH_AGENT = '''
 import time
-from clove import CloveClient
+from clove_sdk import CloveClient
 
 with CloveClient() as client:
     client.register("crasher")
@@ -52,7 +52,7 @@ with CloveClient() as client:
 
 INFINITE_LOOP_AGENT = '''
 import time
-from clove import CloveClient
+from clove_sdk import CloveClient
 
 with CloveClient() as client:
     client.register("looper")
@@ -66,7 +66,7 @@ with CloveClient() as client:
 
 MEMORY_HOG_AGENT = '''
 import time
-from clove import CloveClient
+from clove_sdk import CloveClient
 
 with CloveClient() as client:
     client.register("memory-hog")

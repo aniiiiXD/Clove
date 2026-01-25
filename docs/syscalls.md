@@ -46,6 +46,8 @@
 | `0x10` | SPAWN | `{"name", "script", "sandboxed?", "network?", "limits?", "restart_policy?", "max_restarts?", "restart_window?"}` | `{"success", "agent_id", "pid", "restart_policy"}` |
 | `0x11` | KILL | `{"name"}` or `{"id"}` | `{"killed", "agent_id"}` |
 | `0x12` | LIST | — | `[{"id", "name", "pid", "state", "uptime_ms"}]` |
+| `0x14` | PAUSE | `{"name"}` or `{"id"}` | `{"success", "paused", "agent_id"}` |
+| `0x15` | RESUME | `{"name"}` or `{"id"}` | `{"success", "resumed", "agent_id"}` |
 
 **Restart configuration:**
 - `restart_policy`: `"never"` (default), `"on-failure"`, or `"always"`
@@ -104,6 +106,32 @@
 
 **Event structure**: `{"type", "data", "source_agent_id", "age_ms"}`
 
+### World Simulation
+
+| Op | Name | Payload | Response |
+|----|------|---------|----------|
+| `0xA0` | WORLD_CREATE | `{"name", "config"}` | `{"success", "world_id"}` |
+| `0xA1` | WORLD_DESTROY | `{"world_id"}` | `{"success"}` |
+| `0xA2` | WORLD_LIST | — | `{"success", "worlds": [...]}` |
+| `0xA3` | WORLD_JOIN | `{"world_id", "agent_id"}` | `{"success"}` |
+| `0xA4` | WORLD_LEAVE | `{"world_id", "agent_id"}` | `{"success"}` |
+| `0xA5` | WORLD_EVENT | `{"world_id", "event_type", "config"}` | `{"success"}` |
+| `0xA6` | WORLD_STATE | `{"world_id"}` | `{"success", "state"}` |
+| `0xA7` | WORLD_SNAPSHOT | `{"world_id", "path?"}` | `{"success", "snapshot_path"}` |
+| `0xA8` | WORLD_RESTORE | `{"world_id", "snapshot_path"}` | `{"success"}` |
+
+**Chaos events**: `network_partition`, `latency_spike`, `packet_loss`, `agent_crash`, `resource_pressure`
+
+### Remote Tunnel
+
+| Op | Name | Payload | Response |
+|----|------|---------|----------|
+| `0xB0` | TUNNEL_CONNECT | `{"relay_url", "token"}` | `{"success", "tunnel_id"}` |
+| `0xB1` | TUNNEL_DISCONNECT | — | `{"success"}` |
+| `0xB2` | TUNNEL_STATUS | — | `{"success", "connected", "relay_url"}` |
+| `0xB3` | TUNNEL_LIST_REMOTES | — | `{"success", "remotes": [...]}` |
+| `0xB4` | TUNNEL_CONFIG | `{"config"}` | `{"success"}` |
+
 ### Metrics
 
 | Op | Name | Payload | Response |
@@ -141,6 +169,79 @@
 }
 ```
 
+### Audit Logging
+
+| Op | Name | Payload | Response |
+|----|------|---------|----------|
+| `0x76` | GET_AUDIT_LOG | `{"category?", "agent_id?", "since_id?", "limit?"}` | `{"success", "count", "entries": [...]}` |
+| `0x77` | SET_AUDIT_CONFIG | `{"log_syscalls?", "log_security?", "log_lifecycle?", ...}` | `{"success", "config"}` |
+
+**Audit categories:**
+- `SECURITY` - Permission denied, blocked commands
+- `AGENT_LIFECYCLE` - Spawn, kill, pause, resume
+- `IPC` - Send, recv, broadcast
+- `STATE_STORE` - Store, fetch, delete
+- `RESOURCE` - Quota exceeded, resource warnings
+- `SYSCALL` - All syscalls (verbose)
+- `NETWORK` - HTTP requests, tunnel events
+- `WORLD` - World simulation events
+
+**Audit entry structure:**
+```json
+{
+  "id": 123,
+  "timestamp": "2026-01-26T12:00:00.000Z",
+  "category": "AGENT_LIFECYCLE",
+  "event_type": "AGENT_SPAWNED",
+  "agent_id": 1,
+  "agent_name": "worker",
+  "success": true,
+  "details": {...}
+}
+```
+
+### Execution Recording & Replay
+
+| Op | Name | Payload | Response |
+|----|------|---------|----------|
+| `0x70` | RECORD_START | `{"include_think?", "include_http?", "include_exec?", "filter_agents?", "max_entries?"}` | `{"success", "state"}` |
+| `0x71` | RECORD_STOP | — | `{"success", "entry_count"}` |
+| `0x72` | RECORD_STATUS | `{"export?"}` | `{"success", "state", "entry_count", "recording?"}` |
+| `0x73` | REPLAY_START | `{"recording"}` | `{"success", "total_entries"}` |
+| `0x74` | REPLAY_STATUS | — | `{"success", "state", "progress", "entries_replayed", "entries_skipped", "error?"}` |
+
+**Recording configuration:**
+- `include_think`: Include LLM calls (non-deterministic, default: false)
+- `include_http`: Include HTTP calls (non-deterministic, default: false)
+- `include_exec`: Include exec calls (may be non-deterministic, default: false)
+- `filter_agents`: Only record these agent IDs (empty = all)
+- `max_entries`: Maximum entries to keep in buffer (default: 50000)
+
+**Recording states:** `IDLE`, `RECORDING`, `PAUSED`
+
+**Replay states:** `IDLE`, `RUNNING`, `PAUSED`, `COMPLETED`, `ERROR`
+
+**Execution log entry structure:**
+```json
+{
+  "sequence_id": 1,
+  "timestamp": "2026-01-26T12:00:00.000Z",
+  "agent_id": 1,
+  "opcode": 16,
+  "opcode_name": "SPAWN",
+  "payload": "{\"name\": \"worker\", ...}",
+  "response": "{\"success\": true, ...}",
+  "duration_us": 1234,
+  "success": true
+}
+```
+
+**Usage notes:**
+- By default, non-deterministic syscalls (THINK, HTTP, EXEC) are excluded from recording
+- Deterministic syscalls are replayed to recreate system state
+- Use `export: true` in RECORD_STATUS to get the full recording for later replay
+- Pass the exported recording JSON string to REPLAY_START to begin replay
+
 ---
 
 ## Future Syscalls
@@ -150,16 +251,6 @@
 | Op | Name | Description | Status |
 |----|------|-------------|--------|
 | `0x51` | DOWNLOAD | Download file from URL to path | Planned |
-
-### Remote Tunnel
-
-| Op | Name | Description | Status |
-|----|------|-------------|--------|
-| `0x70` | TUNNEL_CONNECT | Connect kernel to relay server | Planned |
-| `0x71` | TUNNEL_STATUS | Check tunnel connection status | Planned |
-| `0x72` | TUNNEL_DISCONNECT | Disconnect from relay | Planned |
-
-> **Note**: Remote connectivity is currently implemented via the Python tunnel client (`scripts/tunnel_client.py`) rather than kernel syscalls. The kernel communicates locally, and the tunnel client bridges to the relay server.
 
 ### Task Orchestration
 
@@ -171,14 +262,10 @@
 | `0x83` | TASK_COMPLETE | Mark task complete | Planned |
 | `0x84` | TASK_LIST | List active tasks | Planned |
 
-### Metrics & Quotas
+### Resource Management
 
 | Op | Name | Description | Status |
 |----|------|-------------|--------|
-| `0xC0` | METRICS_SYSTEM | Get system-wide metrics | **DONE** |
-| `0xC1` | METRICS_AGENT | Get specific agent metrics | **DONE** |
-| `0xC2` | METRICS_ALL_AGENTS | Get all agents' metrics | **DONE** |
-| `0xC3` | METRICS_CGROUP | Get cgroup resource metrics | **DONE** |
 | `0x92` | SET_QUOTA | Set resource quota for agent | Planned |
 
 ---
@@ -212,7 +299,7 @@ See [CLI Reference](../cli/README.md) for usage.
 ## Python SDK
 
 ```python
-from clove import CloveClient
+from clove_sdk import CloveClient
 
 with CloveClient() as c:
     c.noop("ping")                              # NOOP
@@ -244,4 +331,13 @@ with CloveClient() as c:
     c.get_agent_metrics(agent_id=123)           # METRICS_AGENT
     c.get_all_agent_metrics()                   # METRICS_ALL_AGENTS
     c.get_cgroup_metrics()                      # METRICS_CGROUP
+    c.pause(name="worker")                      # PAUSE
+    c.resume(name="worker")                     # RESUME
+    c.get_audit_log(category="AGENT_LIFECYCLE") # GET_AUDIT_LOG
+    c.set_audit_config(log_lifecycle=True)      # SET_AUDIT_CONFIG
+    c.start_recording()                         # RECORD_START
+    c.stop_recording()                          # RECORD_STOP
+    status = c.get_recording_status(export=True)  # RECORD_STATUS
+    c.start_replay(status["recording"])         # REPLAY_START
+    c.get_replay_status()                       # REPLAY_STATUS
 ```

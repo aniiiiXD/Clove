@@ -3,7 +3,7 @@
 import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'agents', 'python_sdk'))
-from agentos import CloveClient
+from clove_sdk import CloveClient
 
 def main():
     print("=== Test 10: State Store ===\n")

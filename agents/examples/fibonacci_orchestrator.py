@@ -20,7 +20,7 @@ import re
 # Add SDK to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python_sdk'))
 
-from agentos import AgentOSClient
+from clove_sdk import AgentOSClient
 
 # The single comprehensive prompt
 ORCHESTRATION_PROMPT = """You are an AI agent that executes tasks. I need you to generate a complete plan with executable code.

@@ -19,7 +19,7 @@ from typing import Optional
 # Add Clove SDK to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', 'agents', 'python_sdk'))
 
-from clove import CloveClient
+from clove_sdk import CloveClient
 
 
 # =============================================================================

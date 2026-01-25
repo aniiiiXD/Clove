@@ -54,7 +54,7 @@ from typing import Any, Optional
 # Add SDK to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python_sdk'))
 
-from agentos import AgentOSClient
+from clove_sdk import AgentOSClient
 
 # Configure logging to stderr (stdout is for MCP protocol)
 logging.basicConfig(

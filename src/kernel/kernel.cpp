@@ -32,6 +32,8 @@ Kernel::Kernel(const Config& config)
     , world_engine_(std::make_unique<WorldEngine>())
     , tunnel_client_(std::make_unique<TunnelClient>())
     , metrics_collector_(std::make_unique<clove::metrics::MetricsCollector>())
+    , audit_logger_(std::make_unique<AuditLogger>())
+    , execution_logger_(std::make_unique<ExecutionLogger>())
 {
     // Initialize LLM client
     LLMConfig llm_config;
@@ -47,7 +49,7 @@ Kernel::~Kernel() {
 }
 
 bool Kernel::init() {
-    spdlog::info("Initializing AgentOS Kernel...");
+    spdlog::info("Initializing Clove Kernel...");
 
     // Initialize reactor
     if (!reactor_->init()) {
@@ -127,7 +129,7 @@ bool Kernel::init() {
 
 void Kernel::run() {
     running_ = true;
-    spdlog::info("AgentOS Kernel v0.1.0 running");
+    spdlog::info("Clove Kernel v0.1.0 running");
     spdlog::info("Listening on: {}", config_.socket_path);
     spdlog::info("Press Ctrl+C to exit");
 
@@ -244,6 +246,12 @@ ipc::Message Kernel::handle_message(const ipc::Message& msg) {
         case ipc::SyscallOp::SYS_LIST:
             return handle_list(msg);
 
+        case ipc::SyscallOp::SYS_PAUSE:
+            return handle_pause(msg);
+
+        case ipc::SyscallOp::SYS_RESUME:
+            return handle_resume(msg);
+
         case ipc::SyscallOp::SYS_EXEC:
             return handle_exec(msg);
 
@@ -359,6 +367,29 @@ ipc::Message Kernel::handle_message(const ipc::Message& msg) {
 
         case ipc::SyscallOp::SYS_METRICS_CGROUP:
             return handle_metrics_cgroup(msg);
+
+        // Audit syscalls
+        case ipc::SyscallOp::SYS_GET_AUDIT_LOG:
+            return handle_get_audit_log(msg);
+
+        case ipc::SyscallOp::SYS_SET_AUDIT_CONFIG:
+            return handle_set_audit_config(msg);
+
+        // Replay syscalls
+        case ipc::SyscallOp::SYS_RECORD_START:
+            return handle_record_start(msg);
+
+        case ipc::SyscallOp::SYS_RECORD_STOP:
+            return handle_record_stop(msg);
+
+        case ipc::SyscallOp::SYS_RECORD_STATUS:
+            return handle_record_status(msg);
+
+        case ipc::SyscallOp::SYS_REPLAY_START:
+            return handle_replay_start(msg);
+
+        case ipc::SyscallOp::SYS_REPLAY_STATUS:
+            return handle_replay_status(msg);
 
         default:
             spdlog::warn("Unknown opcode: 0x{:02x}", static_cast<uint8_t>(msg.opcode));
@@ -485,6 +516,9 @@ ipc::Message Kernel::handle_spawn(const ipc::Message& msg) {
         event_data["parent_id"] = msg.agent_id;
         emit_event(KernelEventType::AGENT_SPAWNED, event_data, 0);
 
+        // Audit log
+        audit_logger_->log_lifecycle("AGENT_SPAWNED", agent->id(), agent->name(), event_data);
+
         return ipc::Message(msg.agent_id, ipc::SyscallOp::SYS_SPAWN, response.dump());
 
     } catch (const std::exception& e) {
@@ -522,6 +556,9 @@ ipc::Message Kernel::handle_kill(const ipc::Message& msg) {
             event_data["name"] = target_name;
             event_data["killed_by"] = msg.agent_id;
             emit_event(KernelEventType::AGENT_EXITED, event_data, 0);
+
+            // Audit log
+            audit_logger_->log_lifecycle("AGENT_KILLED", target_id, target_name, event_data);
         }
 
         json response;
@@ -550,6 +587,98 @@ ipc::Message Kernel::handle_list(const ipc::Message& msg) {
     }
 
     return ipc::Message(msg.agent_id, ipc::SyscallOp::SYS_LIST, response.dump());
+}
+
+ipc::Message Kernel::handle_pause(const ipc::Message& msg) {
+    try {
+        json j = json::parse(msg.payload_str());
+
+        bool paused = false;
+        uint32_t target_id = 0;
+        std::string target_name;
+
+        // Get agent info before pausing
+        if (j.contains("id")) {
+            target_id = j["id"].get<uint32_t>();
+            auto agent = agent_manager_->get_agent(target_id);
+            if (agent) target_name = agent->name();
+            paused = agent_manager_->pause_agent(target_id);
+        } else if (j.contains("name")) {
+            target_name = j["name"].get<std::string>();
+            auto agent = agent_manager_->get_agent(target_name);
+            if (agent) target_id = agent->id();
+            paused = agent_manager_->pause_agent(target_name);
+        }
+
+        // Emit AGENT_PAUSED event if paused
+        if (paused && target_id > 0) {
+            json event_data;
+            event_data["agent_id"] = target_id;
+            event_data["name"] = target_name;
+            event_data["paused_by"] = msg.agent_id;
+            emit_event(KernelEventType::AGENT_PAUSED, event_data, 0);
+
+            // Audit log
+            audit_logger_->log_lifecycle("AGENT_PAUSED", target_id, target_name, event_data);
+        }
+
+        json response;
+        response["success"] = paused;
+        response["paused"] = paused;
+        response["agent_id"] = target_id;
+
+        return ipc::Message(msg.agent_id, ipc::SyscallOp::SYS_PAUSE, response.dump());
+
+    } catch (const std::exception& e) {
+        return ipc::Message(msg.agent_id, ipc::SyscallOp::SYS_PAUSE,
+            R"({"success": false, "error": "invalid request"})");
+    }
+}
+
+ipc::Message Kernel::handle_resume(const ipc::Message& msg) {
+    try {
+        json j = json::parse(msg.payload_str());
+
+        bool resumed = false;
+        uint32_t target_id = 0;
+        std::string target_name;
+
+        // Get agent info before resuming
+        if (j.contains("id")) {
+            target_id = j["id"].get<uint32_t>();
+            auto agent = agent_manager_->get_agent(target_id);
+            if (agent) target_name = agent->name();
+            resumed = agent_manager_->resume_agent(target_id);
+        } else if (j.contains("name")) {
+            target_name = j["name"].get<std::string>();
+            auto agent = agent_manager_->get_agent(target_name);
+            if (agent) target_id = agent->id();
+            resumed = agent_manager_->resume_agent(target_name);
+        }
+
+        // Emit AGENT_RESUMED event if resumed
+        if (resumed && target_id > 0) {
+            json event_data;
+            event_data["agent_id"] = target_id;
+            event_data["name"] = target_name;
+            event_data["resumed_by"] = msg.agent_id;
+            emit_event(KernelEventType::AGENT_RESUMED, event_data, 0);
+
+            // Audit log
+            audit_logger_->log_lifecycle("AGENT_RESUMED", target_id, target_name, event_data);
+        }
+
+        json response;
+        response["success"] = resumed;
+        response["resumed"] = resumed;
+        response["agent_id"] = target_id;
+
+        return ipc::Message(msg.agent_id, ipc::SyscallOp::SYS_RESUME, response.dump());
+
+    } catch (const std::exception& e) {
+        return ipc::Message(msg.agent_id, ipc::SyscallOp::SYS_RESUME,
+            R"({"success": false, "error": "invalid request"})");
+    }
 }
 
 ipc::Message Kernel::handle_exec(const ipc::Message& msg) {
@@ -2466,6 +2595,314 @@ ipc::Message Kernel::handle_metrics_cgroup(const ipc::Message& msg) {
     }
 
     return ipc::Message(msg.agent_id, ipc::SyscallOp::SYS_METRICS_CGROUP, response.dump());
+}
+
+// ============================================================================
+// Audit Syscall Handlers
+// ============================================================================
+
+ipc::Message Kernel::handle_get_audit_log(const ipc::Message& msg) {
+    json request;
+    try {
+        request = json::parse(msg.payload_str());
+    } catch (...) {
+        request = json::object();
+    }
+
+    // Parse filter parameters
+    std::string category_str = request.value("category", "");
+    uint32_t agent_filter = request.value("agent_id", 0);
+    uint64_t since_id = request.value("since_id", 0);
+    size_t limit = request.value("limit", 100);
+
+    // Get entries based on filters
+    std::vector<AuditLogEntry> entries;
+    if (!category_str.empty()) {
+        AuditCategory cat = audit_category_from_string(category_str);
+        if (agent_filter > 0) {
+            entries = audit_logger_->get_entries(&cat, &agent_filter, since_id, limit);
+        } else {
+            entries = audit_logger_->get_entries(&cat, nullptr, since_id, limit);
+        }
+    } else {
+        if (agent_filter > 0) {
+            entries = audit_logger_->get_entries(nullptr, &agent_filter, since_id, limit);
+        } else {
+            entries = audit_logger_->get_entries(nullptr, nullptr, since_id, limit);
+        }
+    }
+
+    // Build response
+    json response;
+    response["success"] = true;
+    response["count"] = entries.size();
+    response["entries"] = json::array();
+
+    for (const auto& entry : entries) {
+        response["entries"].push_back(entry.to_json());
+    }
+
+    return ipc::Message(msg.agent_id, ipc::SyscallOp::SYS_GET_AUDIT_LOG, response.dump());
+}
+
+ipc::Message Kernel::handle_set_audit_config(const ipc::Message& msg) {
+    json request;
+    try {
+        request = json::parse(msg.payload_str());
+    } catch (...) {
+        json response;
+        response["success"] = false;
+        response["error"] = "Invalid JSON payload";
+        return ipc::Message(msg.agent_id, ipc::SyscallOp::SYS_SET_AUDIT_CONFIG, response.dump());
+    }
+
+    // Get current config
+    AuditConfig config = audit_logger_->get_config();
+
+    // Update config with any provided values
+    if (request.contains("max_entries")) {
+        config.max_entries = request["max_entries"].get<size_t>();
+    }
+    if (request.contains("log_syscalls")) {
+        config.log_syscalls = request["log_syscalls"].get<bool>();
+    }
+    if (request.contains("log_security")) {
+        config.log_security = request["log_security"].get<bool>();
+    }
+    if (request.contains("log_lifecycle")) {
+        config.log_lifecycle = request["log_lifecycle"].get<bool>();
+    }
+    if (request.contains("log_ipc")) {
+        config.log_ipc = request["log_ipc"].get<bool>();
+    }
+    if (request.contains("log_state")) {
+        config.log_state = request["log_state"].get<bool>();
+    }
+    if (request.contains("log_resource")) {
+        config.log_resource = request["log_resource"].get<bool>();
+    }
+    if (request.contains("log_network")) {
+        config.log_network = request["log_network"].get<bool>();
+    }
+    if (request.contains("log_world")) {
+        config.log_world = request["log_world"].get<bool>();
+    }
+
+    // Apply config
+    audit_logger_->set_config(config);
+
+    // Log the config change
+    json audit_details;
+    audit_details["changed_by"] = msg.agent_id;
+    audit_details["new_config"] = request;
+    audit_logger_->log(AuditCategory::SECURITY, "AUDIT_CONFIG_CHANGED", msg.agent_id, "", audit_details, true);
+
+    json response;
+    response["success"] = true;
+    response["config"]["max_entries"] = config.max_entries;
+    response["config"]["log_syscalls"] = config.log_syscalls;
+    response["config"]["log_security"] = config.log_security;
+    response["config"]["log_lifecycle"] = config.log_lifecycle;
+    response["config"]["log_ipc"] = config.log_ipc;
+    response["config"]["log_state"] = config.log_state;
+    response["config"]["log_resource"] = config.log_resource;
+    response["config"]["log_network"] = config.log_network;
+    response["config"]["log_world"] = config.log_world;
+
+    return ipc::Message(msg.agent_id, ipc::SyscallOp::SYS_SET_AUDIT_CONFIG, response.dump());
+}
+
+// ============================================================================
+// Replay Syscall Handlers
+// ============================================================================
+
+ipc::Message Kernel::handle_record_start(const ipc::Message& msg) {
+    json request;
+    try {
+        request = json::parse(msg.payload_str());
+    } catch (...) {
+        request = json::object();
+    }
+
+    // Parse config if provided
+    RecordingConfig config = execution_logger_->get_config();
+    if (request.contains("include_think")) {
+        config.include_think = request["include_think"].get<bool>();
+    }
+    if (request.contains("include_http")) {
+        config.include_http = request["include_http"].get<bool>();
+    }
+    if (request.contains("include_exec")) {
+        config.include_exec = request["include_exec"].get<bool>();
+    }
+    if (request.contains("max_entries")) {
+        config.max_entries = request["max_entries"].get<size_t>();
+    }
+    if (request.contains("filter_agents") && request["filter_agents"].is_array()) {
+        config.filter_agents.clear();
+        for (const auto& id : request["filter_agents"]) {
+            config.filter_agents.push_back(id.get<uint32_t>());
+        }
+    }
+
+    execution_logger_->set_config(config);
+    bool success = execution_logger_->start_recording();
+
+    json response;
+    response["success"] = success;
+    response["recording"] = success;
+
+    // Log to audit
+    if (success) {
+        json audit_details;
+        audit_details["started_by"] = msg.agent_id;
+        audit_logger_->log(AuditCategory::SYSCALL, "RECORDING_STARTED", msg.agent_id, "", audit_details, true);
+    }
+
+    return ipc::Message(msg.agent_id, ipc::SyscallOp::SYS_RECORD_START, response.dump());
+}
+
+ipc::Message Kernel::handle_record_stop(const ipc::Message& msg) {
+    bool success = execution_logger_->stop_recording();
+
+    json response;
+    response["success"] = success;
+    response["recording"] = false;
+    response["entries_recorded"] = execution_logger_->entry_count();
+
+    // Log to audit
+    if (success) {
+        json audit_details;
+        audit_details["stopped_by"] = msg.agent_id;
+        audit_details["entries_recorded"] = execution_logger_->entry_count();
+        audit_logger_->log(AuditCategory::SYSCALL, "RECORDING_STOPPED", msg.agent_id, "", audit_details, true);
+    }
+
+    return ipc::Message(msg.agent_id, ipc::SyscallOp::SYS_RECORD_STOP, response.dump());
+}
+
+ipc::Message Kernel::handle_record_status(const ipc::Message& msg) {
+    json request;
+    try {
+        request = json::parse(msg.payload_str());
+    } catch (...) {
+        request = json::object();
+    }
+
+    json response;
+    response["success"] = true;
+
+    // Get recording state
+    auto state = execution_logger_->recording_state();
+    response["recording"] = (state == RecordingState::RECORDING);
+    response["paused"] = (state == RecordingState::PAUSED);
+    response["entry_count"] = execution_logger_->entry_count();
+    response["last_sequence_id"] = execution_logger_->last_sequence_id();
+
+    // If export requested, include the recording data
+    if (request.value("export", false)) {
+        response["recording_data"] = execution_logger_->export_recording();
+    }
+
+    // If entries requested, include them
+    if (request.contains("get_entries")) {
+        size_t limit = request.value("limit", 100);
+        uint64_t since = request.value("since_id", 0);
+        auto entries = execution_logger_->get_entries(since, limit);
+
+        response["entries"] = json::array();
+        for (const auto& entry : entries) {
+            response["entries"].push_back(entry.to_json());
+        }
+    }
+
+    return ipc::Message(msg.agent_id, ipc::SyscallOp::SYS_RECORD_STATUS, response.dump());
+}
+
+ipc::Message Kernel::handle_replay_start(const ipc::Message& msg) {
+    json request;
+    try {
+        request = json::parse(msg.payload_str());
+    } catch (...) {
+        json response;
+        response["success"] = false;
+        response["error"] = "Invalid JSON payload";
+        return ipc::Message(msg.agent_id, ipc::SyscallOp::SYS_REPLAY_START, response.dump());
+    }
+
+    // If recording data is provided, import it
+    if (request.contains("recording_data")) {
+        std::string data = request["recording_data"].is_string()
+            ? request["recording_data"].get<std::string>()
+            : request["recording_data"].dump();
+
+        if (!execution_logger_->import_recording(data)) {
+            json response;
+            response["success"] = false;
+            response["error"] = "Failed to import recording data";
+            return ipc::Message(msg.agent_id, ipc::SyscallOp::SYS_REPLAY_START, response.dump());
+        }
+    }
+
+    bool success = execution_logger_->start_replay();
+
+    json response;
+    response["success"] = success;
+    if (!success) {
+        auto progress = execution_logger_->get_replay_progress();
+        response["error"] = progress.last_error;
+    } else {
+        auto progress = execution_logger_->get_replay_progress();
+        response["total_entries"] = progress.total_entries;
+    }
+
+    // Log to audit
+    if (success) {
+        json audit_details;
+        audit_details["started_by"] = msg.agent_id;
+        auto progress = execution_logger_->get_replay_progress();
+        audit_details["total_entries"] = progress.total_entries;
+        audit_logger_->log(AuditCategory::SYSCALL, "REPLAY_STARTED", msg.agent_id, "", audit_details, true);
+    }
+
+    return ipc::Message(msg.agent_id, ipc::SyscallOp::SYS_REPLAY_START, response.dump());
+}
+
+ipc::Message Kernel::handle_replay_status(const ipc::Message& msg) {
+    auto progress = execution_logger_->get_replay_progress();
+
+    json response;
+    response["success"] = true;
+
+    std::string state_str;
+    switch (progress.state) {
+        case ReplayState::IDLE:      state_str = "idle"; break;
+        case ReplayState::RUNNING:   state_str = "running"; break;
+        case ReplayState::PAUSED:    state_str = "paused"; break;
+        case ReplayState::COMPLETED: state_str = "completed"; break;
+        case ReplayState::ERROR:     state_str = "error"; break;
+        default: state_str = "unknown"; break;
+    }
+
+    response["state"] = state_str;
+    response["total_entries"] = progress.total_entries;
+    response["current_entry"] = progress.current_entry;
+    response["entries_replayed"] = progress.entries_replayed;
+    response["entries_skipped"] = progress.entries_skipped;
+
+    if (!progress.last_error.empty()) {
+        response["last_error"] = progress.last_error;
+    }
+
+    // Calculate progress percentage
+    if (progress.total_entries > 0) {
+        double percent = 100.0 * progress.current_entry / progress.total_entries;
+        response["progress_percent"] = static_cast<int>(percent);
+    } else {
+        response["progress_percent"] = 0;
+    }
+
+    return ipc::Message(msg.agent_id, ipc::SyscallOp::SYS_REPLAY_STATUS, response.dump());
 }
 
 } // namespace agentos::kernel

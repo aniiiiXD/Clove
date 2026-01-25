@@ -15,6 +15,7 @@ const char* agent_state_to_string(AgentState state) {
         case AgentState::CREATED:  return "CREATED";
         case AgentState::STARTING: return "STARTING";
         case AgentState::RUNNING:  return "RUNNING";
+        case AgentState::PAUSED:   return "PAUSED";
         case AgentState::STOPPING: return "STOPPING";
         case AgentState::STOPPED:  return "STOPPED";
         case AgentState::FAILED:   return "FAILED";
@@ -44,7 +45,7 @@ AgentProcess::AgentProcess(const AgentConfig& config)
 }
 
 AgentProcess::~AgentProcess() {
-    if (state_ == AgentState::RUNNING || state_ == AgentState::STARTING) {
+    if (state_ == AgentState::RUNNING || state_ == AgentState::STARTING || state_ == AgentState::PAUSED) {
         stop();
     }
 }
@@ -95,7 +96,7 @@ bool AgentProcess::start() {
 }
 
 bool AgentProcess::stop(int timeout_ms) {
-    if (state_ != AgentState::RUNNING && state_ != AgentState::STARTING) {
+    if (state_ != AgentState::RUNNING && state_ != AgentState::STARTING && state_ != AgentState::PAUSED) {
         return true;
     }
 
@@ -116,6 +117,54 @@ bool AgentProcess::stop(int timeout_ms) {
 bool AgentProcess::restart() {
     stop();
     return start();
+}
+
+bool AgentProcess::pause() {
+    if (state_ != AgentState::RUNNING) {
+        spdlog::error("Cannot pause agent {} - not running (state={})",
+                      config_.name, agent_state_to_string(state_));
+        return false;
+    }
+
+    if (!sandbox_) {
+        spdlog::error("Cannot pause agent {} - no sandbox", config_.name);
+        return false;
+    }
+
+    spdlog::info("Pausing agent: {} (id={})", config_.name, id_);
+
+    if (!sandbox_->pause()) {
+        spdlog::error("Failed to pause sandbox for agent {}", config_.name);
+        return false;
+    }
+
+    set_state(AgentState::PAUSED);
+    spdlog::info("Agent {} paused", config_.name);
+    return true;
+}
+
+bool AgentProcess::resume() {
+    if (state_ != AgentState::PAUSED) {
+        spdlog::error("Cannot resume agent {} - not paused (state={})",
+                      config_.name, agent_state_to_string(state_));
+        return false;
+    }
+
+    if (!sandbox_) {
+        spdlog::error("Cannot resume agent {} - no sandbox", config_.name);
+        return false;
+    }
+
+    spdlog::info("Resuming agent: {} (id={})", config_.name, id_);
+
+    if (!sandbox_->resume()) {
+        spdlog::error("Failed to resume sandbox for agent {}", config_.name);
+        return false;
+    }
+
+    set_state(AgentState::RUNNING);
+    spdlog::info("Agent {} resumed", config_.name);
+    return true;
 }
 
 pid_t AgentProcess::pid() const {
@@ -314,6 +363,42 @@ bool AgentManager::kill_agent(uint32_t id) {
     agents_by_id_.erase(it);
 
     return true;
+}
+
+bool AgentManager::pause_agent(const std::string& name) {
+    auto it = agents_by_name_.find(name);
+    if (it == agents_by_name_.end()) {
+        spdlog::error("Agent {} not found", name);
+        return false;
+    }
+    return it->second->pause();
+}
+
+bool AgentManager::pause_agent(uint32_t id) {
+    auto it = agents_by_id_.find(id);
+    if (it == agents_by_id_.end()) {
+        spdlog::error("Agent {} not found", id);
+        return false;
+    }
+    return it->second->pause();
+}
+
+bool AgentManager::resume_agent(const std::string& name) {
+    auto it = agents_by_name_.find(name);
+    if (it == agents_by_name_.end()) {
+        spdlog::error("Agent {} not found", name);
+        return false;
+    }
+    return it->second->resume();
+}
+
+bool AgentManager::resume_agent(uint32_t id) {
+    auto it = agents_by_id_.find(id);
+    if (it == agents_by_id_.end()) {
+        spdlog::error("Agent {} not found", id);
+        return false;
+    }
+    return it->second->resume();
 }
 
 std::vector<std::shared_ptr<AgentProcess>> AgentManager::list_agents() const {

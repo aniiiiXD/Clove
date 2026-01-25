@@ -19,7 +19,7 @@ from pathlib import Path
 
 # Add SDK to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "python_sdk"))
-from agentos import AgentOSClient
+from clove_sdk import AgentOSClient
 
 
 class AgentMonitor:

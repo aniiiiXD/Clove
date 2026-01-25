@@ -21,7 +21,7 @@ from pathlib import Path
 
 # Add SDK to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "python_sdk"))
-from clove import CloveClient
+from clove_sdk import CloveClient
 
 
 REVIEW_PROMPT = """Review this Python code for:

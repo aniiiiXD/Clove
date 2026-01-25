@@ -32,7 +32,7 @@ import urllib.error
 # Add SDK to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python_sdk'))
 
-from agentos import AgentOSClient
+from clove_sdk import AgentOSClient
 
 def test_tcp_connection(host, port, timeout=3):
     """Try to establish a TCP connection"""

@@ -4,7 +4,7 @@
 namespace agentos::util {
 
 void init_logger() {
-    auto console = spdlog::stdout_color_mt("agentos");
+    auto console = spdlog::stdout_color_mt("clove");
     spdlog::set_default_logger(console);
     spdlog::set_level(spdlog::level::debug);
     spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] %v");

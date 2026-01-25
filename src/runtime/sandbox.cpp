@@ -328,12 +328,70 @@ bool Sandbox::stop(int timeout_ms) {
 }
 
 bool Sandbox::destroy() {
-    if (state_ == SandboxState::RUNNING) {
+    if (state_ == SandboxState::RUNNING || state_ == SandboxState::PAUSED) {
         stop();
     }
 
     cleanup_cgroups();
     spdlog::debug("Sandbox {} destroyed", config_.name);
+    return true;
+}
+
+bool Sandbox::pause() {
+    if (state_ != SandboxState::RUNNING) {
+        spdlog::error("Cannot pause sandbox {} - not running (state={})",
+                      config_.name, static_cast<int>(state_));
+        return false;
+    }
+
+    if (child_pid_ <= 0) {
+        spdlog::error("Cannot pause sandbox {} - no valid PID", config_.name);
+        return false;
+    }
+
+    spdlog::info("Pausing sandbox {} (PID={})", config_.name, child_pid_);
+
+    if (kill(child_pid_, SIGSTOP) < 0) {
+        if (errno == ESRCH) {
+            spdlog::error("Process {} no longer exists", child_pid_);
+            set_state(SandboxState::STOPPED);
+            return false;
+        }
+        spdlog::error("kill(SIGSTOP) failed: {}", strerror(errno));
+        return false;
+    }
+
+    set_state(SandboxState::PAUSED);
+    spdlog::info("Sandbox {} paused", config_.name);
+    return true;
+}
+
+bool Sandbox::resume() {
+    if (state_ != SandboxState::PAUSED) {
+        spdlog::error("Cannot resume sandbox {} - not paused (state={})",
+                      config_.name, static_cast<int>(state_));
+        return false;
+    }
+
+    if (child_pid_ <= 0) {
+        spdlog::error("Cannot resume sandbox {} - no valid PID", config_.name);
+        return false;
+    }
+
+    spdlog::info("Resuming sandbox {} (PID={})", config_.name, child_pid_);
+
+    if (kill(child_pid_, SIGCONT) < 0) {
+        if (errno == ESRCH) {
+            spdlog::error("Process {} no longer exists", child_pid_);
+            set_state(SandboxState::STOPPED);
+            return false;
+        }
+        spdlog::error("kill(SIGCONT) failed: {}", strerror(errno));
+        return false;
+    }
+
+    set_state(SandboxState::RUNNING);
+    spdlog::info("Sandbox {} resumed", config_.name);
     return true;
 }
 
@@ -356,7 +414,7 @@ int Sandbox::wait() {
 }
 
 bool Sandbox::is_running() const {
-    if (child_pid_ <= 0 || state_ != SandboxState::RUNNING) {
+    if (child_pid_ <= 0 || (state_ != SandboxState::RUNNING && state_ != SandboxState::PAUSED)) {
         return false;
     }
 

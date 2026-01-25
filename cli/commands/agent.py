@@ -229,7 +229,7 @@ def create_agent(name, template, output):
 import sys
 sys.path.insert(0, 'agents/python_sdk')
 
-from agentos import AgentOS
+from clove_sdk import AgentOS
 
 def main():
     agent = AgentOS("{name}")
@@ -254,7 +254,7 @@ import sys
 import time
 sys.path.insert(0, 'agents/python_sdk')
 
-from agentos import AgentOS
+from clove_sdk import AgentOS
 
 def main():
     agent = AgentOS("{name}")
@@ -280,7 +280,7 @@ if __name__ == "__main__":
 import sys
 sys.path.insert(0, 'agents/python_sdk')
 
-from agentos import AgentOS
+from clove_sdk import AgentOS
 
 def main():
     agent = AgentOS("{name}")

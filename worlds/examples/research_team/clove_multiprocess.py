@@ -21,7 +21,7 @@ from dataclasses import dataclass
 # Add Clove SDK to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', 'agents', 'python_sdk'))
 
-from clove import CloveClient
+from clove_sdk import CloveClient
 
 
 # =============================================================================
@@ -34,7 +34,7 @@ def get_researcher_agent_code(sdk_path: str, agent_name: str, coordinator_name: 
 """Researcher Agent - Runs as separate process"""
 import sys
 sys.path.insert(0, "{sdk_path}")
-from clove import CloveClient
+from clove_sdk import CloveClient
 
 def main():
     client = CloveClient()
@@ -87,7 +87,7 @@ def get_writer_agent_code(sdk_path: str, agent_name: str, coordinator_name: str)
 """Writer Agent - Runs as separate process"""
 import sys
 sys.path.insert(0, "{sdk_path}")
-from clove import CloveClient
+from clove_sdk import CloveClient
 
 def main():
     client = CloveClient()

@@ -33,7 +33,7 @@ class CloveRunner:
     def connect(self) -> bool:
         """Connect to Clove kernel"""
         try:
-            from clove import CloveClient
+            from clove_sdk import CloveClient
             self.clove_client = CloveClient()
             if not self.clove_client.connect():
                 print("ERROR: Failed to connect to Clove kernel")

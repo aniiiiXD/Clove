@@ -131,7 +131,9 @@ Clove runs agents as **real OS processes** with:
 | LLM integration | Gemini API, fair queuing across agents |
 | Permission system | Path validation, command filtering, domain whitelist |
 | Hot reload | Auto-restart crashed agents with backoff |
-| IPC | Inter-agent messaging + pub/sub events |
+| IPC | Inter-agent messaging (send/recv/broadcast) |
+| Event system | Pub/sub for agent lifecycle and custom events |
+| State store | Key-value storage with TTL and scopes (global/agent/session) |
 | Metrics | Per-agent CPU, memory, syscall counts |
 | World simulation | Virtual filesystems, network mocking, chaos injection |
 | Remote access | Relay server for cloud deployments |

@@ -24,6 +24,9 @@ TESTS = [
     ("09_events.py", "Event System (Pub/Sub)"),
     ("10_state_store.py", "State Store"),
     ("11_metrics.py", "Metrics System"),
+    ("12_pause_resume.py", "Pause/Resume"),
+    ("13_audit_logging.py", "Audit Logging"),
+    ("14_execution_replay.py", "Execution Recording & Replay"),
 ]
 
 def run_test(test_file: str, description: str) -> bool:

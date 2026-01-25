@@ -15,7 +15,7 @@ cp agents/python_sdk/agentos.py your_project/
 ## Quick Start
 
 ```python
-from agentos import CloveClient
+from clove_sdk import CloveClient
 
 with CloveClient() as client:
     # Echo test

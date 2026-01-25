@@ -28,6 +28,8 @@ class SyscallOp(IntEnum):
     SYS_SPAWN = 0x10  # Spawn a sandboxed agent
     SYS_KILL = 0x11   # Kill an agent
     SYS_LIST = 0x12   # List running agents
+    SYS_PAUSE = 0x14  # Pause an agent
+    SYS_RESUME = 0x15 # Resume a paused agent
     # IPC - Inter-Agent Communication
     SYS_SEND = 0x20       # Send message to another agent
     SYS_RECV = 0x21       # Receive pending messages
@@ -69,6 +71,15 @@ class SyscallOp(IntEnum):
     SYS_METRICS_AGENT = 0xC1       # Get metrics for specific agent
     SYS_METRICS_ALL_AGENTS = 0xC2  # Get metrics for all agents
     SYS_METRICS_CGROUP = 0xC3      # Get cgroup metrics
+    # Audit Logging
+    SYS_GET_AUDIT_LOG = 0x76       # Get audit log entries
+    SYS_SET_AUDIT_CONFIG = 0x77    # Configure audit logging
+    # Execution Recording & Replay
+    SYS_RECORD_START = 0x70        # Start recording execution
+    SYS_RECORD_STOP = 0x71         # Stop recording
+    SYS_RECORD_STATUS = 0x72       # Get recording status
+    SYS_REPLAY_START = 0x73        # Start replay
+    SYS_REPLAY_STATUS = 0x74       # Get replay status
     SYS_EXIT = 0xFF   # Graceful shutdown
 
 
@@ -303,6 +314,40 @@ class CloveClient:
         if response:
             result = json.loads(response.payload_str)
             return result.get("killed", False)
+        return False
+
+    def pause(self, name: str = None, agent_id: int = None) -> bool:
+        """Pause a running agent (SIGSTOP)"""
+        import json
+        payload = {}
+        if name:
+            payload["name"] = name
+        elif agent_id:
+            payload["id"] = agent_id
+        else:
+            return False
+
+        response = self.call(SyscallOp.SYS_PAUSE, json.dumps(payload))
+        if response:
+            result = json.loads(response.payload_str)
+            return result.get("success", False)
+        return False
+
+    def resume(self, name: str = None, agent_id: int = None) -> bool:
+        """Resume a paused agent (SIGCONT)"""
+        import json
+        payload = {}
+        if name:
+            payload["name"] = name
+        elif agent_id:
+            payload["id"] = agent_id
+        else:
+            return False
+
+        response = self.call(SyscallOp.SYS_RESUME, json.dumps(payload))
+        if response:
+            result = json.loads(response.payload_str)
+            return result.get("success", False)
         return False
 
     def list_agents(self) -> list:
@@ -853,6 +898,171 @@ class CloveClient:
             payload["cgroup_path"] = cgroup_path
 
         response = self.call(SyscallOp.SYS_METRICS_CGROUP, json.dumps(payload))
+        if response:
+            try:
+                return json.loads(response.payload_str)
+            except json.JSONDecodeError:
+                return {"success": False, "error": response.payload_str}
+        return {"success": False, "error": "No response from kernel"}
+
+    # ========== Audit Logging ==========
+
+    def get_audit_log(self, category: str = None, agent_id: int = None,
+                      since_id: int = 0, limit: int = 100) -> dict:
+        """Get audit log entries with optional filtering.
+
+        Args:
+            category: Filter by category (SECURITY, AGENT_LIFECYCLE, IPC, etc.)
+            agent_id: Filter by agent ID
+            since_id: Get entries after this ID
+            limit: Maximum entries to return (default 100)
+
+        Returns:
+            Dict with success, count, and entries list
+        """
+        import json
+        payload = {"limit": limit}
+        if category:
+            payload["category"] = category
+        if agent_id:
+            payload["agent_id"] = agent_id
+        if since_id:
+            payload["since_id"] = since_id
+
+        response = self.call(SyscallOp.SYS_GET_AUDIT_LOG, json.dumps(payload))
+        if response:
+            try:
+                return json.loads(response.payload_str)
+            except json.JSONDecodeError:
+                return {"success": False, "error": response.payload_str}
+        return {"success": False, "error": "No response from kernel"}
+
+    def set_audit_config(self, **kwargs) -> dict:
+        """Configure audit logging.
+
+        Args:
+            max_entries: Maximum entries to keep in memory
+            log_syscalls: Log all syscalls (verbose)
+            log_security: Log security events
+            log_lifecycle: Log agent lifecycle events
+            log_ipc: Log IPC events
+            log_state: Log state store events
+            log_resource: Log resource events
+            log_network: Log network events
+            log_world: Log world simulation events
+
+        Returns:
+            Dict with success and current config
+        """
+        import json
+        response = self.call(SyscallOp.SYS_SET_AUDIT_CONFIG, json.dumps(kwargs))
+        if response:
+            try:
+                return json.loads(response.payload_str)
+            except json.JSONDecodeError:
+                return {"success": False, "error": response.payload_str}
+        return {"success": False, "error": "No response from kernel"}
+
+    # ========== Execution Recording & Replay ==========
+
+    def start_recording(self, include_think: bool = False, include_http: bool = False,
+                        include_exec: bool = False, filter_agents: list = None,
+                        max_entries: int = 50000) -> dict:
+        """Start recording syscall execution for later replay.
+
+        Args:
+            include_think: Include LLM calls (non-deterministic)
+            include_http: Include HTTP calls (non-deterministic)
+            include_exec: Include exec calls (may be non-deterministic)
+            filter_agents: Only record these agent IDs (empty = all)
+            max_entries: Maximum entries to keep in buffer
+
+        Returns:
+            Dict with success status
+        """
+        import json
+        payload = {
+            "include_think": include_think,
+            "include_http": include_http,
+            "include_exec": include_exec,
+            "max_entries": max_entries
+        }
+        if filter_agents:
+            payload["filter_agents"] = filter_agents
+
+        response = self.call(SyscallOp.SYS_RECORD_START, json.dumps(payload))
+        if response:
+            try:
+                return json.loads(response.payload_str)
+            except json.JSONDecodeError:
+                return {"success": False, "error": response.payload_str}
+        return {"success": False, "error": "No response from kernel"}
+
+    def stop_recording(self) -> dict:
+        """Stop recording syscall execution.
+
+        Returns:
+            Dict with success status and entry count
+        """
+        import json
+
+        response = self.call(SyscallOp.SYS_RECORD_STOP, "{}")
+        if response:
+            try:
+                return json.loads(response.payload_str)
+            except json.JSONDecodeError:
+                return {"success": False, "error": response.payload_str}
+        return {"success": False, "error": "No response from kernel"}
+
+    def get_recording_status(self, export: bool = False) -> dict:
+        """Get current recording status and optionally export the recording.
+
+        Args:
+            export: If True, include the full recording data in response
+
+        Returns:
+            Dict with recording state, entry count, and optionally recording data
+        """
+        import json
+        payload = {"export": export}
+
+        response = self.call(SyscallOp.SYS_RECORD_STATUS, json.dumps(payload))
+        if response:
+            try:
+                return json.loads(response.payload_str)
+            except json.JSONDecodeError:
+                return {"success": False, "error": response.payload_str}
+        return {"success": False, "error": "No response from kernel"}
+
+    def start_replay(self, recording_data: str) -> dict:
+        """Start replaying a recorded execution session.
+
+        Args:
+            recording_data: JSON string of recorded execution entries
+
+        Returns:
+            Dict with success status and total entries to replay
+        """
+        import json
+        payload = {"recording": recording_data}
+
+        response = self.call(SyscallOp.SYS_REPLAY_START, json.dumps(payload))
+        if response:
+            try:
+                return json.loads(response.payload_str)
+            except json.JSONDecodeError:
+                return {"success": False, "error": response.payload_str}
+        return {"success": False, "error": "No response from kernel"}
+
+    def get_replay_status(self) -> dict:
+        """Get current replay status and progress.
+
+        Returns:
+            Dict with replay state, progress, entries replayed/skipped, and errors
+        """
+        import json
+
+        response = self.call(SyscallOp.SYS_REPLAY_STATUS, "{}")
         if response:
             try:
                 return json.loads(response.payload_str)

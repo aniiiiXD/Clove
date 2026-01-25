@@ -59,6 +59,8 @@ add_executable(clove_kernel
     src/kernel/world_engine.cpp
     src/kernel/tunnel_client.cpp
     src/kernel/metrics/metrics.cpp
+    src/kernel/audit_log.cpp
+    src/kernel/execution_log.cpp
     src/ipc/socket_server.cpp
     src/runtime/sandbox.cpp
     src/runtime/agent_process.cpp

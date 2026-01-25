@@ -14,7 +14,7 @@ import random
 # Add SDK to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python_sdk'))
 
-from agentos import AgentOSClient
+from clove_sdk import AgentOSClient
 
 def main():
     agent_name = os.environ.get('AGENT_NAME', f'unstable-{os.getpid()}')

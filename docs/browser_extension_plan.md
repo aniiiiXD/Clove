@@ -247,7 +247,7 @@ await agent.stop()
 
 ### As CLOVE Agent
 ```python
-from agentos import CloveOS
+from clove_sdk import CloveOS
 
 aos = CloveOS()
 aos.register("browser_agent")

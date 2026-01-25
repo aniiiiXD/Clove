@@ -17,7 +17,7 @@ import json
 # Add SDK to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python_sdk'))
 
-from agentos import AgentOS
+from clove_sdk import AgentOS
 
 
 def main():

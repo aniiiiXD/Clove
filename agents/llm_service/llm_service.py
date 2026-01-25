@@ -174,17 +174,36 @@ def handle_request(client, request: dict) -> dict:
         if hasattr(response, 'candidates') and response.candidates:
             for candidate in response.candidates:
                 if hasattr(candidate, 'content') and candidate.content:
-                    for part in candidate.content.parts:
-                        if hasattr(part, 'function_call') and part.function_call:
-                            fc = part.function_call
-                            function_calls.append({
-                                "name": fc.name,
-                                "arguments": dict(fc.args) if fc.args else {}
-                            })
+                    parts = getattr(candidate.content, 'parts', None)
+                    if parts:
+                        for part in parts:
+                            if hasattr(part, 'function_call') and part.function_call:
+                                fc = part.function_call
+                                function_calls.append({
+                                    "name": fc.name,
+                                    "arguments": dict(fc.args) if fc.args else {}
+                                })
+
+        # Extract text content safely
+        content_text = ""
+        try:
+            if hasattr(response, 'text') and response.text:
+                content_text = response.text
+        except Exception:
+            # If text extraction fails, try to extract from parts
+            if hasattr(response, 'candidates') and response.candidates:
+                for candidate in response.candidates:
+                    if hasattr(candidate, 'content') and candidate.content:
+                        parts = getattr(candidate.content, 'parts', None)
+                        if parts:
+                            for part in parts:
+                                if hasattr(part, 'text') and part.text:
+                                    content_text = part.text
+                                    break
 
         result = {
             "success": True,
-            "content": response.text if hasattr(response, 'text') else "",
+            "content": content_text,
             "tokens": tokens
         }
 

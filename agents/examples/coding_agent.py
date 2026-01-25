@@ -23,7 +23,7 @@ import os
 # Add SDK to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python_sdk'))
 
-from agentos import AgentOSClient
+from clove_sdk import AgentOSClient
 from agentic import AgenticLoop, AgentResult
 
 
