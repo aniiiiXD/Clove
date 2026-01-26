@@ -18,7 +18,17 @@ SocketServer::~SocketServer() {
 
 bool SocketServer::init() {
     // Remove existing socket file
-    unlink(socket_path_.c_str());
+    if (unlink(socket_path_.c_str()) < 0 && errno != ENOENT) {
+        // ENOENT means file doesn't exist, which is fine
+        if (errno == EACCES || errno == EPERM) {
+            spdlog::error("Cannot remove stale socket '{}': Permission denied", socket_path_);
+            spdlog::error("This may happen if kernel was previously run as root.");
+            spdlog::error("Fix with: sudo rm {}", socket_path_);
+            return false;
+        }
+        // Other errors are non-fatal, we'll try to bind anyway
+        spdlog::debug("Could not remove socket file: {}", strerror(errno));
+    }
 
     // Create Unix domain socket
     server_fd_ = socket(AF_UNIX, SOCK_STREAM, 0);

@@ -469,6 +469,8 @@ ipc::Message Kernel::handle_spawn(const ipc::Message& msg) {
             config.limits.memory_limit_bytes = lim.value("memory", 256 * 1024 * 1024);
             config.limits.max_pids = lim.value("max_pids", 64);
             config.limits.cpu_quota_us = lim.value("cpu_quota", 100000);
+            config.limits.cpu_period_us = lim.value("cpu_period", 100000);
+            config.limits.cpu_shares = lim.value("cpu_shares", 1024);
         }
 
         // Restart configuration
@@ -507,6 +509,23 @@ ipc::Message Kernel::handle_spawn(const ipc::Message& msg) {
         response["pid"] = agent->pid();
         response["status"] = "running";
         response["restart_policy"] = runtime::restart_policy_to_string(config.restart.policy);
+
+        // Include isolation status
+        auto iso_status = agent->get_isolation_status();
+        json isolation;
+        isolation["fully_isolated"] = iso_status.fully_isolated;
+        isolation["namespaces"]["pid"] = iso_status.pid_namespace;
+        isolation["namespaces"]["net"] = iso_status.net_namespace;
+        isolation["namespaces"]["mnt"] = iso_status.mnt_namespace;
+        isolation["namespaces"]["uts"] = iso_status.uts_namespace;
+        isolation["cgroups"]["available"] = iso_status.cgroups_available;
+        isolation["cgroups"]["memory_limit"] = iso_status.memory_limit_applied;
+        isolation["cgroups"]["cpu_quota"] = iso_status.cpu_quota_applied;
+        isolation["cgroups"]["pids_limit"] = iso_status.pids_limit_applied;
+        if (!iso_status.degraded_reason.empty()) {
+            isolation["degraded_reason"] = iso_status.degraded_reason;
+        }
+        response["isolation"] = isolation;
 
         // Emit AGENT_SPAWNED event
         json event_data;

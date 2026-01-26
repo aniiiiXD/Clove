@@ -140,6 +140,9 @@ public:
     AgentMetrics get_metrics() const;
     void record_llm_call(int tokens);
 
+    // Isolation status
+    IsolationStatus get_isolation_status() const;
+
     // Hierarchy
     void set_parent_id(uint32_t parent_id) { parent_id_ = parent_id; }
     uint32_t parent_id() const { return parent_id_; }

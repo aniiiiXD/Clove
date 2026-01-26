@@ -1261,6 +1261,334 @@ clove deploy aws --region us-east-1 --instance-type t3.small
 
 ---
 
+## The Next Frontier: Memory & Models
+
+> **"Process isolation is table stakes. The real game is Memory and Model orchestration."**
+
+Clove currently handles the **infrastructure layer** (processes, IPC, resources). But AI agents have two fundamental needs that operating systems never had to deal with:
+
+1. **Memory** - Agents need to remember things across sessions, share knowledge, and manage context
+2. **Models** - Agents need intelligent routing to the right LLM, cost control, and fallback strategies
+
+This is a **paradigm shift** from traditional OS concepts.
+
+---
+
+### Phase 10: Agent Memory System
+
+**Goal:** Kernel-managed memory that persists, shares, and scales across agents.
+
+#### Memory Types
+
+| Type | Description | Scope | Persistence |
+|------|-------------|-------|-------------|
+| **Working Memory** | Current task context, scratchpad | Per-agent | Session |
+| **Short-term Memory** | Recent conversation history | Per-agent | Hours |
+| **Long-term Memory** | Learned facts, preferences | Per-agent | Permanent |
+| **Episodic Memory** | Past task executions, outcomes | Per-agent | Permanent |
+| **Semantic Memory** | Embeddings, vector search | Shared | Permanent |
+| **Shared Memory** | Cross-agent knowledge base | Global | Permanent |
+
+#### Architecture
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      Clove Memory Manager                        │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐ │
+│  │   Working   │  │  Short-term │  │      Long-term          │ │
+│  │   Memory    │  │   Memory    │  │      Memory             │ │
+│  │  (in-proc)  │  │  (Redis?)   │  │  (SQLite/Postgres)      │ │
+│  └─────────────┘  └─────────────┘  └─────────────────────────┘ │
+│  ┌─────────────────────────────────────────────────────────────┐ │
+│  │              Vector Store (Embeddings)                       │ │
+│  │              ChromaDB / Qdrant / pgvector                   │ │
+│  └─────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+         ┌────────────────────┼────────────────────┐
+         ▼                    ▼                    ▼
+    ┌─────────┐          ┌─────────┐          ┌─────────┐
+    │ Agent 1 │          │ Agent 2 │          │ Agent 3 │
+    │ memory  │          │ memory  │          │ memory  │
+    │ quota:  │          │ quota:  │          │ quota:  │
+    │ 100MB   │          │ 50MB    │          │ 200MB   │
+    └─────────┘          └─────────┘          └─────────┘
+```
+
+#### New Syscalls
+| Syscall | Opcode | Description |
+|---------|--------|-------------|
+| `SYS_MEM_STORE` | `0xD0` | Store to memory (with type, TTL, scope) |
+| `SYS_MEM_RECALL` | `0xD1` | Recall from memory (exact key or semantic) |
+| `SYS_MEM_SEARCH` | `0xD2` | Semantic search across memories |
+| `SYS_MEM_FORGET` | `0xD3` | Delete memory entries |
+| `SYS_MEM_SHARE` | `0xD4` | Share memory with other agents |
+| `SYS_MEM_STATS` | `0xD5` | Get memory usage stats |
+| `SYS_MEM_COMPACT` | `0xD6` | Trigger memory compaction/summarization |
+
+#### Key Features
+- **Memory Quotas** - Per-agent limits on memory storage
+- **Automatic Summarization** - Compress old memories using LLM
+- **Semantic Search** - Find relevant memories by meaning, not just key
+- **Memory Sharing** - Agents can share knowledge with permission
+- **Memory Replay** - Replay past experiences for learning
+- **Forgetting Curves** - Automatic decay of less-accessed memories
+
+#### SDK API (Proposed)
+```python
+with CloveClient() as client:
+    # Store different memory types
+    client.remember("The user prefers dark mode", type="long_term")
+    client.remember("Current task: analyze sales data", type="working")
+    client.remember({"role": "user", "content": "..."}, type="conversation")
+
+    # Recall by key or semantically
+    facts = client.recall("user preferences")
+    relevant = client.search_memory("What does the user like?", limit=5)
+
+    # Share with other agents
+    client.share_memory("domain_knowledge", with_agent="researcher")
+
+    # Memory stats
+    stats = client.memory_stats()
+    # {"working": "2MB", "short_term": "15MB", "long_term": "45MB", "quota": "100MB"}
+```
+
+---
+
+### Phase 11: MLOps & Custom Model Runtime
+
+**Goal:** Full ML lifecycle - train, version, deploy, and serve custom models alongside LLMs.
+
+> **"Agents don't just consume LLMs. They train, fine-tune, and deploy their own models."**
+
+#### The Vision
+
+Clove becomes the runtime for the entire ML pipeline:
+
+| Capability | Description |
+|------------|-------------|
+| **Train** | Submit training jobs with GPU scheduling |
+| **Version** | Model registry with lineage tracking |
+| **Deploy** | Serve models as inference endpoints |
+| **Predict** | Real-time and batch inference |
+| **Monitor** | Track drift, latency, accuracy |
+| **A/B Test** | Compare model versions in production |
+
+#### Architecture
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         Clove Model Registry                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐│
+│  │  drug-toxicity-v1.2    │ drug-efficacy-v2.0   │ molecule-embed-v1  ││
+│  │  (PyTorch, 450MB)      │ (sklearn, 12MB)       │ (ONNX, 800MB)      ││
+│  │  GPU: required         │ GPU: none             │ GPU: optional      ││
+│  └─────────────────────────────────────────────────────────────────────┘│
+└────────────────────────────────┬────────────────────────────────────────┘
+                                 │
+┌────────────────────────────────┼────────────────────────────────────────┐
+│                      Model Serving Layer                                 │
+│  ┌───────────────┐  ┌───────────────┐  ┌───────────────┐               │
+│  │  Inference    │  │    Batch      │  │   Training    │               │
+│  │  Server       │  │  Processor    │  │   Scheduler   │               │
+│  │  (real-time)  │  │   (async)     │  │  (GPU queue)  │               │
+│  └───────────────┘  └───────────────┘  └───────────────┘               │
+│  ┌───────────────────────────────────────────────────────────────────┐ │
+│  │                      GPU Pool Manager                              │ │
+│  │  GPU 0: training (agent-5)        GPU 1: inference (shared)       │ │
+│  └───────────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────┘
+                                 │
+         ┌───────────────────────┼───────────────────────┐
+         ▼                       ▼                       ▼
+    ┌─────────┐            ┌─────────┐            ┌─────────┐
+    │ Agent 1 │            │ Agent 2 │            │ Agent 3 │
+    │ trains  │            │ infers  │            │ monitors│
+    └─────────┘            └─────────┘            └─────────┘
+```
+
+#### ML Lifecycle
+```
+   DATA ───▶ TRAIN ───▶ VERSION ───▶ DEPLOY ───▶ SERVE
+     │                                              │
+     │         MONITOR ◀─────────────────────────────
+     │            │
+     └───────▶ RETRAIN (automatic or triggered)
+```
+
+#### New Syscalls
+| Syscall | Opcode | Description |
+|---------|--------|-------------|
+| `SYS_ML_TRAIN` | `0xE0` | Submit training job (dataset, config, GPU) |
+| `SYS_ML_STATUS` | `0xE1` | Get training job status, metrics, logs |
+| `SYS_ML_REGISTER` | `0xE2` | Register model to registry with version |
+| `SYS_ML_LIST` | `0xE3` | List models in registry |
+| `SYS_ML_DEPLOY` | `0xE4` | Deploy model as inference endpoint |
+| `SYS_ML_PREDICT` | `0xE5` | Run inference on deployed model |
+| `SYS_ML_BATCH` | `0xE6` | Submit batch prediction job |
+| `SYS_ML_UNDEPLOY` | `0xE7` | Remove model from serving |
+| `SYS_ML_METRICS` | `0xE8` | Get model performance metrics |
+| `SYS_ML_COMPARE` | `0xE9` | A/B test comparison stats |
+| `SYS_GPU_STATUS` | `0xEA` | Get GPU pool status and queue |
+| `SYS_GPU_REQUEST` | `0xEB` | Request GPU allocation |
+
+#### SDK API (Proposed)
+```python
+with CloveClient() as client:
+    # === TRAINING ===
+    job = client.ml_train(
+        name="drug-toxicity",
+        framework="pytorch",           # pytorch, sklearn, tensorflow, xgboost
+        script="train_toxicity.py",
+        dataset="s3://data/molecules.parquet",
+        config={"epochs": 100, "batch_size": 32, "lr": 0.001},
+        gpu=True,
+        gpu_memory="8GB"
+    )
+
+    # Monitor training
+    while not job.done:
+        status = client.ml_status(job.id)
+        print(f"Epoch {status['epoch']}, Loss: {status['loss']}")
+
+    # === VERSIONING ===
+    model = client.ml_register(
+        job_id=job.id,
+        name="drug-toxicity",
+        version="1.2",
+        metrics={"accuracy": 0.94, "auc": 0.97}
+    )
+
+    # === DEPLOYMENT ===
+    endpoint = client.ml_deploy(
+        model="drug-toxicity:1.2",
+        replicas=2,
+        gpu=True,
+        autoscale={"min": 1, "max": 5}
+    )
+
+    # === INFERENCE ===
+    prediction = client.ml_predict(
+        model="drug-toxicity:1.2",
+        input={"smiles": "CC(=O)OC1=CC=CC=C1C(=O)O"}
+    )
+    # {"toxicity_score": 0.12, "confidence": 0.95}
+
+    # === BATCH ===
+    batch = client.ml_batch(
+        model="drug-toxicity:1.2",
+        input_path="s3://data/candidates.parquet",
+        output_path="s3://results/predictions.parquet"
+    )
+
+    # === MONITORING ===
+    metrics = client.ml_metrics("drug-toxicity:1.2")
+    # {"latency_p50": 45, "latency_p99": 120, "drift_score": 0.03}
+
+    # === A/B TESTING ===
+    client.ml_deploy("drug-toxicity:2.0", traffic_percent=10)
+    comparison = client.ml_compare("drug-toxicity:1.2", "drug-toxicity:2.0")
+```
+
+#### GPU Scheduling
+```python
+# Request GPU for training
+job = client.ml_train(
+    ...,
+    gpu=True,
+    gpu_memory="16GB",
+    gpu_type="A100",        # Optional: specific type
+    priority="high",        # high, normal, low
+    preemptible=False       # Can be preempted?
+)
+
+# GPU pool status
+status = client.gpu_status()
+# {
+#   "total": 4, "available": 1, "queue_depth": 3,
+#   "allocations": [
+#     {"gpu": 0, "agent": "trainer-1", "memory": "14GB"},
+#     {"gpu": 1, "agent": "inference", "memory": "8GB"}
+#   ]
+# }
+```
+
+#### Model Registry Schema
+```yaml
+# Stored in registry for each model version
+name: drug-toxicity
+version: 1.2
+framework: pytorch
+created_by: agent-trainer-1
+
+artifacts:
+  model: s3://models/drug-toxicity/1.2/model.pt
+  config: s3://models/drug-toxicity/1.2/config.yaml
+
+metrics:
+  accuracy: 0.94
+  auc: 0.97
+  training_time_hours: 4.2
+
+lineage:
+  parent_model: drug-toxicity:1.1
+  dataset: molecules-v3.parquet
+  code_commit: abc123
+
+tags: [production-ready, reviewed]
+```
+
+#### Supported Frameworks
+| Framework | Training | Inference | GPU |
+|-----------|----------|-----------|-----|
+| PyTorch | Yes | TorchServe | Yes |
+| TensorFlow | Yes | TF Serving | Yes |
+| scikit-learn | Yes | ONNX Runtime | No |
+| XGBoost | Yes | Native | Optional |
+| Hugging Face | Yes | Transformers | Yes |
+| ONNX | Import | ONNX Runtime | Yes |
+| Custom | Docker | Docker | Yes |
+
+---
+
+### Phase 12: Agent Profiles & Templates
+
+**Goal:** Standardized agent definitions with memory, model, and resource configs.
+
+```yaml
+# agent.clove.yaml
+name: research-agent
+version: 1.0
+
+resources:
+  memory: 512MB
+  cpu_quota: 50%
+  max_pids: 32
+
+memory:
+  working: 10MB
+  short_term: 50MB
+  long_term: 200MB
+  vector_store: true
+
+models:
+  primary: claude-sonnet
+  fallback: [gpt-4, gemini-pro]
+  budget:
+    daily: 2.00
+    monthly: 50.00
+
+permissions:
+  level: standard
+  allowed_paths: ["/data/*", "/output/*"]
+  allowed_domains: ["api.example.com"]
+
+restart:
+  policy: on-failure
+  max_restarts: 5
+```
+
+---
+
 ## Roadmap Summary
 
 | Phase | Feature | Status | Priority |
@@ -1272,11 +1600,14 @@ clove deploy aws --region us-east-1 --instance-type t3.small
 | **Done** | CLI, Relay, Metrics | **Complete** | - |
 | **Done** | Hot Reload | **Complete** | - |
 | **Done** | Benchmark Suite | **Complete** | - |
-| **Next** | PAUSE/RESUME Syscalls | Not Started | High |
-| **Next** | AUDIT Logging | Not Started | High |
-| **Next** | REPLAY Mechanism | Not Started | Medium |
+| **Done** | PAUSE/RESUME | **Complete** | - |
+| **Done** | AUDIT Logging | **Complete** | - |
+| **Done** | REPLAY Mechanism | **Complete** | - |
+| **Next** | Demo Project (DrugDiscovery) | Planning | High |
+| Phase 10 | **Agent Memory System** | Not Started | **Critical** |
+| Phase 11 | **MLOps & Custom Models** | Not Started | **Critical** |
+| Phase 12 | Agent Profiles/Templates | Not Started | High |
 | Later | Multi-Agent Orchestration | Not Started | Medium |
-| Later | Resource Quotas | Not Started | Medium |
 | Later | Multi-Node Cluster | Not Started | Medium |
 | Later | clove.yaml / clove up | Not Started | Medium |
 | Future | Clove Cloud (managed) | Not Started | Low |

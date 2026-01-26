@@ -244,6 +244,19 @@ void AgentProcess::record_llm_call(int tokens) {
         config_.name, tokens, llm_tokens_used_);
 }
 
+IsolationStatus AgentProcess::get_isolation_status() const {
+    if (sandbox_) {
+        return sandbox_->isolation_status();
+    }
+
+    // No sandbox - return a status indicating no isolation
+    IsolationStatus status;
+    status.fully_isolated = false;
+    status.degraded_reason = config_.sandboxed ?
+        "Sandbox not initialized" : "Sandboxing disabled";
+    return status;
+}
+
 void AgentProcess::add_child(uint32_t child_id) {
     child_ids_.push_back(child_id);
     spdlog::debug("Agent {} added child: {}", config_.name, child_id);

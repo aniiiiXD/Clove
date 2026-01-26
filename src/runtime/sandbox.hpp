@@ -47,6 +47,28 @@ enum class SandboxState {
     FAILED
 };
 
+// Isolation status - tracks what isolation features are actually active
+struct IsolationStatus {
+    // Namespace isolation
+    bool pid_namespace = false;
+    bool net_namespace = false;
+    bool mnt_namespace = false;
+    bool uts_namespace = false;
+
+    // Cgroup resource limits
+    bool cgroups_available = false;
+    bool memory_limit_applied = false;
+    bool cpu_quota_applied = false;
+    bool pids_limit_applied = false;
+
+    // Overall
+    bool fully_isolated = false;  // All requested features active
+    std::string degraded_reason;  // Why isolation is degraded (if applicable)
+
+    // Helper to check if running in degraded mode
+    bool is_degraded() const { return !fully_isolated && !degraded_reason.empty(); }
+};
+
 // Forward declaration
 class Sandbox;
 
@@ -75,6 +97,7 @@ public:
     pid_t pid() const { return child_pid_; }
     const std::string& name() const { return config_.name; }
     const SandboxConfig& config() const { return config_; }
+    const IsolationStatus& isolation_status() const { return isolation_status_; }
 
     // Wait for sandbox to exit
     int wait();
@@ -94,6 +117,7 @@ private:
     pid_t child_pid_ = -1;
     int exit_code_ = -1;
     SandboxEventCallback event_callback_;
+    IsolationStatus isolation_status_;
 
     // cgroup paths
     std::string cgroup_path_;

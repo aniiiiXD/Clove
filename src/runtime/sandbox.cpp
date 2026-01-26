@@ -68,9 +68,12 @@ bool Sandbox::create() {
 bool Sandbox::setup_cgroups() {
     // Check if cgroup v2 is available
     if (!fs::exists("/sys/fs/cgroup/cgroup.controllers")) {
-        spdlog::warn("cgroup v2 not available, skipping cgroup setup");
+        spdlog::warn("DEGRADED ISOLATION: cgroup v2 not available - resource limits will NOT be enforced");
+        isolation_status_.degraded_reason = "cgroup v2 not available";
         return true;
     }
+
+    isolation_status_.cgroups_available = true;
 
     // Create agentos cgroup directory if needed
     std::string agentos_cgroup = "/sys/fs/cgroup/agentos";
@@ -78,7 +81,9 @@ bool Sandbox::setup_cgroups() {
         try {
             fs::create_directories(agentos_cgroup);
         } catch (const std::exception& e) {
-            spdlog::warn("Cannot create cgroup dir (need root): {}", e.what());
+            spdlog::warn("DEGRADED ISOLATION: Cannot create cgroup dir (need root): {}", e.what());
+            spdlog::warn("  -> Memory limits, CPU quotas, and PID limits will NOT be enforced");
+            isolation_status_.degraded_reason = "Cannot create cgroup directory (need root)";
             return true; // Continue without cgroups
         }
     }
@@ -88,32 +93,110 @@ bool Sandbox::setup_cgroups() {
         try {
             fs::create_directories(cgroup_path_);
         } catch (const std::exception& e) {
-            spdlog::warn("Cannot create sandbox cgroup (need root): {}", e.what());
+            spdlog::warn("DEGRADED ISOLATION: Cannot create sandbox cgroup (need root): {}", e.what());
+            isolation_status_.degraded_reason = "Cannot create sandbox cgroup (need root)";
             return true;
         }
     }
 
     // Set memory limit
     std::string memory_max = cgroup_path_ + "/memory.max";
-    if (fs::exists(cgroup_path_ + "/memory.max")) {
-        std::ofstream(memory_max) << config_.limits.memory_limit_bytes;
-        spdlog::debug("Set memory limit: {} bytes", config_.limits.memory_limit_bytes);
+    if (fs::exists(memory_max)) {
+        try {
+            std::ofstream ofs(memory_max);
+            if (ofs.is_open()) {
+                ofs << config_.limits.memory_limit_bytes;
+                if (ofs.good()) {
+                    isolation_status_.memory_limit_applied = true;
+                    spdlog::debug("Set memory limit: {} bytes", config_.limits.memory_limit_bytes);
+                } else {
+                    spdlog::warn("DEGRADED ISOLATION: Failed to write memory limit");
+                }
+            }
+        } catch (const std::exception& e) {
+            spdlog::warn("DEGRADED ISOLATION: Cannot set memory limit: {}", e.what());
+        }
+    } else {
+        spdlog::warn("DEGRADED ISOLATION: memory.max not available - memory limit NOT enforced");
     }
 
     // Set CPU quota
     std::string cpu_max = cgroup_path_ + "/cpu.max";
-    if (fs::exists(cgroup_path_ + "/cpu.max")) {
-        std::ofstream(cpu_max) << config_.limits.cpu_quota_us << " "
-                               << config_.limits.cpu_period_us;
-        spdlog::debug("Set CPU quota: {}us per {}us",
-            config_.limits.cpu_quota_us, config_.limits.cpu_period_us);
+    if (fs::exists(cpu_max)) {
+        try {
+            std::ofstream ofs(cpu_max);
+            if (ofs.is_open()) {
+                ofs << config_.limits.cpu_quota_us << " " << config_.limits.cpu_period_us;
+                if (ofs.good()) {
+                    isolation_status_.cpu_quota_applied = true;
+                    spdlog::debug("Set CPU quota: {}us per {}us",
+                        config_.limits.cpu_quota_us, config_.limits.cpu_period_us);
+                } else {
+                    spdlog::warn("DEGRADED ISOLATION: Failed to write CPU quota");
+                }
+            }
+        } catch (const std::exception& e) {
+            spdlog::warn("DEGRADED ISOLATION: Cannot set CPU quota: {}", e.what());
+        }
+    } else {
+        spdlog::warn("DEGRADED ISOLATION: cpu.max not available - CPU quota NOT enforced");
     }
 
     // Set max PIDs
     std::string pids_max = cgroup_path_ + "/pids.max";
-    if (fs::exists(cgroup_path_ + "/pids.max")) {
-        std::ofstream(pids_max) << config_.limits.max_pids;
-        spdlog::debug("Set max PIDs: {}", config_.limits.max_pids);
+    if (fs::exists(pids_max)) {
+        try {
+            std::ofstream ofs(pids_max);
+            if (ofs.is_open()) {
+                ofs << config_.limits.max_pids;
+                if (ofs.good()) {
+                    isolation_status_.pids_limit_applied = true;
+                    spdlog::debug("Set max PIDs: {}", config_.limits.max_pids);
+                } else {
+                    spdlog::warn("DEGRADED ISOLATION: Failed to write PID limit");
+                }
+            }
+        } catch (const std::exception& e) {
+            spdlog::warn("DEGRADED ISOLATION: Cannot set PID limit: {}", e.what());
+        }
+    } else {
+        spdlog::warn("DEGRADED ISOLATION: pids.max not available - PID limit NOT enforced");
+    }
+
+    // Set CPU weight (cgroups v2 equivalent of cpu.shares)
+    // cpu.weight range: 1-10000, default 100
+    // cpu.shares range: 2-262144, default 1024
+    // Conversion: weight = shares * 100 / 1024 (roughly)
+    std::string cpu_weight = cgroup_path_ + "/cpu.weight";
+    if (fs::exists(cpu_weight)) {
+        try {
+            // Convert shares (default 1024) to weight (default 100)
+            uint64_t weight = (config_.limits.cpu_shares * 100) / 1024;
+            if (weight < 1) weight = 1;
+            if (weight > 10000) weight = 10000;
+
+            std::ofstream ofs(cpu_weight);
+            if (ofs.is_open()) {
+                ofs << weight;
+                if (ofs.good()) {
+                    spdlog::debug("Set CPU weight: {} (from shares {})",
+                        weight, config_.limits.cpu_shares);
+                }
+            }
+        } catch (const std::exception& e) {
+            spdlog::debug("Could not set CPU weight: {}", e.what());
+        }
+    }
+
+    // Log summary of cgroup status
+    if (!isolation_status_.memory_limit_applied ||
+        !isolation_status_.cpu_quota_applied ||
+        !isolation_status_.pids_limit_applied) {
+        spdlog::warn("Sandbox {} running with partial cgroup limits: memory={}, cpu={}, pids={}",
+            config_.name,
+            isolation_status_.memory_limit_applied ? "ON" : "OFF",
+            isolation_status_.cpu_quota_applied ? "ON" : "OFF",
+            isolation_status_.pids_limit_applied ? "ON" : "OFF");
     }
 
     return true;
@@ -230,7 +313,12 @@ bool Sandbox::start(const std::string& command, const std::vector<std::string>& 
         delete[] stack;
 
         // Try fallback to fork if clone fails (no root)
-        spdlog::info("Falling back to fork() (no namespace isolation)");
+        spdlog::warn("DEGRADED ISOLATION: clone() failed, falling back to fork()");
+        spdlog::warn("  -> Namespace isolation (PID, NET, MNT, UTS) will NOT be available");
+        spdlog::warn("  -> Run as root or with CAP_SYS_ADMIN for full isolation");
+
+        isolation_status_.degraded_reason = "clone() failed - no namespace isolation (need root/CAP_SYS_ADMIN)";
+
         child_pid_ = fork();
 
         if (child_pid_ < 0) {
@@ -252,18 +340,47 @@ bool Sandbox::start(const std::string& command, const std::vector<std::string>& 
             _exit(127);
         }
 
+        // Update isolation status for degraded mode
+        isolation_status_.fully_isolated = false;
+
         set_state(SandboxState::RUNNING);
-        spdlog::info("Sandbox {} started (PID={}, no isolation)", config_.name, child_pid_);
+        spdlog::warn("Sandbox {} started in DEGRADED MODE (PID={}, no namespace isolation)",
+            config_.name, child_pid_);
         return true;
     }
+
+    // Namespace isolation succeeded - update status
+    if (config_.enable_pid_namespace) isolation_status_.pid_namespace = true;
+    if (config_.enable_mount_namespace) isolation_status_.mnt_namespace = true;
+    if (config_.enable_uts_namespace) isolation_status_.uts_namespace = true;
+    if (!config_.enable_network) isolation_status_.net_namespace = true;
 
     // Parent: close read end
     close(pipe_fd[0]);
 
     // Add child to cgroup
+    bool cgroup_assigned = false;
     if (config_.enable_cgroups && fs::exists(cgroup_path_ + "/cgroup.procs")) {
-        std::ofstream(cgroup_path_ + "/cgroup.procs") << child_pid_;
-        spdlog::debug("Added PID {} to cgroup {}", child_pid_, cgroup_path_);
+        try {
+            std::ofstream ofs(cgroup_path_ + "/cgroup.procs");
+            if (ofs.is_open()) {
+                ofs << child_pid_;
+                if (ofs.good()) {
+                    cgroup_assigned = true;
+                    spdlog::debug("Added PID {} to cgroup {}", child_pid_, cgroup_path_);
+                }
+            }
+        } catch (const std::exception& e) {
+            spdlog::warn("DEGRADED ISOLATION: Failed to add process to cgroup: {}", e.what());
+        }
+    }
+
+    if (config_.enable_cgroups && !cgroup_assigned) {
+        spdlog::warn("DEGRADED ISOLATION: Process {} not added to cgroup - resource limits NOT enforced",
+            child_pid_);
+        isolation_status_.memory_limit_applied = false;
+        isolation_status_.cpu_quota_applied = false;
+        isolation_status_.pids_limit_applied = false;
     }
 
     // Signal child to continue
@@ -272,8 +389,35 @@ bool Sandbox::start(const std::string& command, const std::vector<std::string>& 
 
     delete[] stack;
 
+    // Determine if fully isolated
+    bool namespaces_ok = (!config_.enable_pid_namespace || isolation_status_.pid_namespace) &&
+                         (!config_.enable_mount_namespace || isolation_status_.mnt_namespace) &&
+                         (!config_.enable_uts_namespace || isolation_status_.uts_namespace) &&
+                         (config_.enable_network || isolation_status_.net_namespace);
+
+    bool cgroups_ok = !config_.enable_cgroups ||
+                      (isolation_status_.memory_limit_applied &&
+                       isolation_status_.cpu_quota_applied &&
+                       isolation_status_.pids_limit_applied);
+
+    isolation_status_.fully_isolated = namespaces_ok && cgroups_ok;
+
     set_state(SandboxState::RUNNING);
-    spdlog::info("Sandbox {} started (PID={})", config_.name, child_pid_);
+
+    if (isolation_status_.fully_isolated) {
+        spdlog::info("Sandbox {} started with FULL isolation (PID={})", config_.name, child_pid_);
+    } else {
+        spdlog::warn("Sandbox {} started with PARTIAL isolation (PID={})", config_.name, child_pid_);
+        spdlog::warn("  Namespaces: pid={}, mnt={}, uts={}, net={}",
+            isolation_status_.pid_namespace ? "ON" : "OFF",
+            isolation_status_.mnt_namespace ? "ON" : "OFF",
+            isolation_status_.uts_namespace ? "ON" : "OFF",
+            isolation_status_.net_namespace ? "ON" : "OFF");
+        spdlog::warn("  Cgroups: memory={}, cpu={}, pids={}",
+            isolation_status_.memory_limit_applied ? "ON" : "OFF",
+            isolation_status_.cpu_quota_applied ? "ON" : "OFF",
+            isolation_status_.pids_limit_applied ? "ON" : "OFF");
+    }
 
     return true;
 }
